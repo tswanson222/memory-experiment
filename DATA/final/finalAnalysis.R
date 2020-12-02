@@ -87,6 +87,8 @@ sorts <- cbind(sorts, inits)
 # write.csv(simple, 'simpleData.csv', row.names = FALSE)
 
 sorts <- data.frame(X = 1:nrow(sorts), sorts)
+#sorts$item1 <- apply(sorts[, c('cat1', 'src1')], 1, paste0, collapse = '.')
+#sorts$item0 <- apply(sorts[, c('cat0', 'src0')], 1, paste0, collapse = '.')
 ### Coding Error Patterns
 ids <- split(sorts, sorts$ID)
 ids <- lapply(ids, function(z) split(z, z$trial))
@@ -96,6 +98,8 @@ n <- 1
 for(i in seq_along(ids)){
   for(j in seq_along(ids[[i]])){
     k <- ids[[i]][[j]]
+    k$item1 <- apply(k[, c('cat1', 'src1')], 1, paste0, collapse = '.')
+    k$item0 <- apply(k[, c('cat0', 'src0')], 1, paste0, collapse = '.')
     s1 <- apply(k[, grep('1$', colnames(k))[1:4]], 1, function(zz) paste0(zz, collapse = '.'))
     s2 <- apply(k[, grep('0$', colnames(k))[1:4]], 1, function(zz) paste0(zz, collapse = '.'))
     
@@ -108,6 +112,7 @@ for(i in seq_along(ids)){
     s7 <- apply(k[, c('cat1', 'room1')], 1, function(zz) paste0(zz, collapse = '.'))
     s8 <- apply(k[, c('cat0', 'room0')], 1, function(zz) paste0(zz, collapse = '.'))
     
+    #ids[[i]][[j]]$time1 <- match(ids[[i]][[j]]$item1, ids[[i]][[j]]$item0)
     ids[[i]][[j]]$item_correct <- as.numeric(s1 %in% s2)
     ids[[i]][[j]]$time_correct <- as.numeric(s1 == s2)
     ids[[i]][[j]]$room_correct <- as.numeric(s3 %in% s4)
@@ -121,6 +126,12 @@ for(i in seq_along(ids)){
     newdat[n, 8] <- sum(ids[[i]][[j]]$cat_correct)/9
     newdat[n, 9] <- sum(ids[[i]][[j]]$cat_room_correct)/9
     n <- n + 1
+    
+    k1 <- ids[[i]][[j]][, 1:11]
+    k2 <- ids[[i]][[j]][, 12:16]
+    k3 <- ids[[i]][[j]][, -(1:16)]
+    
+    #ids[[i]][[j]] <- cbind(k1[match(k$item0, k$item1), ], k2, k3[match(k$item0, k$item1), ])
   }
 }
 
@@ -129,7 +140,7 @@ row.names(ids) <- 1:nrow(ids)
 colnames(newdat) <- c(colnames(simple)[1:4], colnames(ids)[17:21])
 for(i in c(1, 2, 4)){newdat[, i] <- factor(newdat[, i])}
 levels(newdat$condition) <- levels(simple$condition)
-#saveRDS(ids, 'fullData2.RDS')
+#saveRDS(ids[, -1], 'fullData2.RDS')
 #saveRDS(newdat, 'simple2.RDS')
 
 ### PLOTS
