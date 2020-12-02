@@ -1,0 +1,203 @@
+---
+title: "paper draft"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+
+### ------------------------------------------------------------------------ ###
+### --------------------------- DATA PREPARATION --------------------------- ###
+### ------------------------------------------------------------------------ ###
+if(!require(ggplot2)){install.packages('ggplot2', dependencies = TRUE)}
+if(!require(lme4)){install.packages('lme4', dependencies = TRUE)} # v1.1-19
+if(!require(lsmeans)){install.packages('lsmeans', dependencies = TRUE)}
+if(!require(effects)){install.packages('effects', dependencies = TRUE)}
+source('extractData.R')
+out <- getData(getJSONS(), matchPs = TRUE)
+sorts <- lapply(out, lapply, getSorts)
+inits <- data.frame(do.call(rbind, lapply(
+  lapply(out, lapply, getInits), function(z) data.frame(do.call(rbind, z)))
+))
+
+sorts$dat1 <- lapply(sorts$dat1, function(z){
+  z1 <- z[-(1:18), ]
+  z1$trial <- z1$trial - 2
+  return(z1)
+})
+
+simple <- lapply(sorts, function(z){
+  k <- seq(1, unique(sapply(z, nrow)), by = 9)
+  lapply(z, function(i) i[k, 1:3])
+})
+
+### Create datasets:
+# Full data: all items, all IDs, all trials, all conditions
+# Simple data: all IDs, all trials, all conditions
+
+for(i in 1:3){
+  for(j in 1:length(sorts[[i]])){
+    sorts[[i]][[j]] <- cbind.data.frame(ID = j, sorts[[i]][[j]])
+    simple[[i]][[j]] <- cbind.data.frame(ID = j, simple[[i]][[j]])
+  }
+  sorts[[i]] <- data.frame(do.call(rbind, sorts[[i]]))
+  simple[[i]] <- data.frame(do.call(rbind, simple[[i]]))
+}
+
+sorts$dat2$trial <- sorts$dat2$trial + 30
+simple$dat2$trial <- simple$dat2$trial + 30
+sorts$dat3$trial <- sorts$dat3$trial + 60
+simple$dat3$trial <- simple$dat3$trial + 60
+
+for(i in 1:3){
+  sorts[[i]] <- data.frame(ID = sorts[[i]]$ID, session = i, sorts[[i]][, -1])
+  simple[[i]] <- data.frame(ID = simple[[i]]$ID, session = i, simple[[i]][, -1])
+}
+
+sorts <- data.frame(do.call(rbind, sorts))
+simple <- data.frame(do.call(rbind, simple))
+
+for(i in c('ID', 'session', 'condition')){
+  sorts[[i]] <- factor(sorts[[i]])
+  simple[[i]] <- factor(simple[[i]])
+}
+
+conditions <- c('SpaceSemTime', 'SpaceTime', 'SpaceSem', 'TimeSem', 'Control')
+levels(sorts$condition) <- rev(levels(sorts$condition))
+sorts$condition <- as.numeric(as.character(sorts$condition))
+sorts$condition <- factor(sorts$condition)
+levels(sorts$condition) <- rev(conditions)
+
+levels(simple$condition) <- rev(levels(simple$condition))
+simple$condition <- as.numeric(as.character(simple$condition))
+simple$condition <- factor(simple$condition)
+levels(simple$condition) <- rev(conditions)
+
+sorts$correct <- sorts$correct/9
+simple$correct <- simple$correct/9
+
+rownames(sorts) <- 1:nrow(sorts)
+rownames(simple) <- 1:nrow(simple)
+sorts <- cbind(sorts, inits)
+# write.csv(sorts, 'fullData.csv', row.names = FALSE)
+# write.csv(simple, 'simpleData.csv', row.names = FALSE)
+
+sorts <- data.frame(X = 1:nrow(sorts), sorts)
+### Coding Error Patterns
+ids <- split(sorts, sorts$ID)
+ids <- lapply(ids, function(z) split(z, z$trial))
+newdat <- data.frame(matrix(NA, nrow = nrow(simple), ncol = 9))
+n <- 1
+
+for(i in seq_along(ids)){
+  for(j in seq_along(ids[[i]])){
+    k <- ids[[i]][[j]]
+    s1 <- apply(k[, grep('1$', colnames(k))[1:4]], 1, function(zz) paste0(zz, collapse = '.'))
+    s2 <- apply(k[, grep('0$', colnames(k))[1:4]], 1, function(zz) paste0(zz, collapse = '.'))
+    
+    s3 <- apply(k[, c('cat1', 'src1', 'room1')], 1, function(zz) paste0(zz, collapse = '.'))
+    s4 <- apply(k[, c('cat0', 'src0', 'room0')], 1, function(zz) paste0(zz, collapse = '.'))
+    
+    s5 <- apply(k[, c('cat1', 'loc1')], 1, function(zz) paste0(zz, collapse = '.'))
+    s6 <- apply(k[, c('cat0', 'loc0')], 1, function(zz) paste0(zz, collapse = '.'))
+    
+    s7 <- apply(k[, c('cat1', 'room1')], 1, function(zz) paste0(zz, collapse = '.'))
+    s8 <- apply(k[, c('cat0', 'room0')], 1, function(zz) paste0(zz, collapse = '.'))
+    
+    ids[[i]][[j]]$item_correct <- as.numeric(s1 %in% s2)
+    ids[[i]][[j]]$time_correct <- as.numeric(s1 == s2)
+    ids[[i]][[j]]$room_correct <- as.numeric(s3 %in% s4)
+    ids[[i]][[j]]$cat_correct <- as.numeric(s5 %in% s6)
+    ids[[i]][[j]]$cat_room_correct <- as.numeric(s7 %in% s8)
+    
+    newdat[n, 1:4] <- ids[[i]][[j]][1, colnames(simple)[1:4]]
+    newdat[n, 5] <- sum(ids[[i]][[j]]$item_correct)/9
+    newdat[n, 6] <- sum(ids[[i]][[j]]$time_correct)/9
+    newdat[n, 7] <- sum(ids[[i]][[j]]$room_correct)/9
+    newdat[n, 8] <- sum(ids[[i]][[j]]$cat_correct)/9
+    newdat[n, 9] <- sum(ids[[i]][[j]]$cat_room_correct)/9
+    n <- n + 1
+  }
+}
+
+ids <- data.frame(do.call(rbind, lapply(ids, function(z) data.frame(do.call(rbind, z)))))
+row.names(ids) <- 1:nrow(ids)
+colnames(newdat) <- c(colnames(simple)[1:4], colnames(ids)[17:21])
+for(i in c(1, 2, 4)){newdat[, i] <- factor(newdat[, i])}
+levels(newdat$condition) <- levels(simple$condition)
+#saveRDS(ids, 'fullData2.RDS')
+#saveRDS(newdat, 'simple2.RDS')
+```
+
+## Introduction
+The memorization technique Method of Loci (MoL) involves constructing an imagined or remembered location in which tokens of the items to be remembered are stored. This method is now associated with memory tasks over long lists of unrelated items, though Roman orators such as Cicero recommended it for memorizing speeches. Quintilian, in the Institutes of Oratory, contrasts the use of this method to remember a list of object, and to remember a speech: "But this mode will be of much less efficacy for learning by heart the parts that constitute a continuous speech, for thoughts have not their peculiar images like things, the image, in this case, being a mere fiction of the imagination. Indeed the place will suggest to us either a fictitious or a real image, but how will the connection of the words of a speech be retained in mind by the aid of such a method? " One of Quintilian's objections to applying the MoL to speeches is that words don't have peculiar images. The second objection concerns the connection of the words in the speech: how could the way in which words are connected in sentences be represented in an imagistic method like the MoL? 
+
+In this paper, we want to pursue Quintilian's second suggestion. We'll ask: what happens to a spatial mnemonic strategy when semantic connections are introduced between the items? There are two answers to this question that seem particularly plausible. First, semantic links between the items to be memorized could compete with the spatial relations, at least when they impose two different orders. This competition would result in worse overall performance than in memorizing semantically unrelated items in a spatial format. The second answer is that the two structures, spatial and semantic, might combine to enhance memory relative to spatial memorization of semantically unrelated items. In fact, this combination could take several forms: we might employ two distinct mnemonic strategies and only combine them at recall, or the two strategies might in some way be combined or interdependent. 
+
+In the present paper, we use a modified MoL task while manipulating the semantic, spatial and temporal connections among items to understand whether these structures compete, combine or operate independently. 
+
+
+
+
+## Methods
+
+
+**Participants.** 56 adults participated online via Amazon Mechanical Turk, **gender breakdown?**. Participation was restricted to adults with an IP address within the United States, and an approval rating of at least **????**. We excluded participants for **????**. 
+
+
+
+**Procedure.**
+In each trial, participants observed a museum image with 9 empty slots. Each slot was filled with a word one by one in an order that depended on condition. Then, after completing a distractor task, subjects were asked to drag and drop each of the 9 words back into the slots in which they were originally displayed. After 2 practice trials on the first day, each session was 30 trials in length. There were 3 sessions per subject on subsequent days. 
+
+Each trial belonged to one of five conditions, and these conditions were randomly distributed across trials. In the control condition, words were displayed in an order uncorrelated with either spatial location or meaning, and the words sharing a room were similarly uncorrelated in meaning. In the time-semantic condition, words were displayed in an order that reflected shared associations but not location. In the space-semantic condition, words were displayed in an uncorrelated order, but place in rooms according to semantic association. In the space-time condition, words were displayed in an order that matched their spatial location. Finally, in the space-semantic-time condition, words were displayed in both spatial and semantic order and rooms shared semantic relations. 
+
+**Materials.**
+Word lists were drawn from **???**.
+
+
+**Results.**
+Overall performance across conditions was quite high: `r mean(simple$correct)`, with many participants at ceiling in a given trial (see figure 1).
+
+```{r  figure one}
+sess <- lapply(1:3, function(z) subset(simple, session == z))
+par(mfrow = c(2, 2))
+for(i in 1:3){hist(sess[[i]]$correct, main = '', xlab = paste('Session', i))}
+idcorr <- sapply(lapply(split(simple, simple$ID), '[[', 'correct'), mean)
+plot(sort(idcorr), type = 'b', ylab = 'Average Overall Performance', xlab = '')
+
+```
+To compare performance across conditions, we fit a linear mixed model predicting performance as a function of condition and trial number with subject and session as random intercepts. Using an ANOVA for model comparison, we determined both condition (p=6.242e-09) and trial number (p < 2.2e-16) were necessary for the best model, though we observed no significant interaction between the two (p=0.9223).  Performance was positively correlated with trial, as we expected given some degree of improvement on the task over many repetitions.
+
+Performance varied significantly by condition, as can be seen in Figure 2, with the space-semantic-time condition seeing the highest performance, and the control condition the lowest. While errors were highest in the control condition, they did not differ significantly from the time-semantic condition (estimate = -.003, p=.998) or space-time condition (estimate = .019, p=.253). However all other conditions were significantly higher than controls. 
+
+```{r  figure two}
+simple2 <- simple
+levels(simple2$condition) <- 1:5
+m2 <- lmer(correct ~ condition + trial + (1|ID) + (1|session),
+           data = simple2, REML = FALSE)
+
+plot(Effect(c('trial', 'condition'), m2))
+
+```
+
+These analyses confirm that condition and trial both contributed to performance. Our central question was: does semantic structure compete or combine with spatial structure? If semantic structures compete, woe would expect the conditions in which space and semantics are not aligned to have more errors than the conditions where they are aligned. If semantic structures combine, we would expect the opposite, since the addition of the spatial structure should provide more of an advantage when it offers additional relational information than the spatial structure. Our results are more consistent with the competition explanation: in the two non-aligned conditions (time-semantic and space-time), subjects were not significantly more accurate than control, whereas in all of the aligned conditions, performance was significantly higher than control.  
+
+
+Another way of interpreting these results is that the presentation order, reflected in the ``time'' conditions, did not make a large contribution to success. Rather, most of the difference between conditions seems to be between differences in the "space" dimension, namely differences between the final layout of items.  
+
+Does this mean that subjects may not have been attending to the presentation order? We looked at another indirect of measure of attention to order: the match between presentation order and the order in which participants returned the items. A strong correlation would support the idea that participants were sensitive to order.  Figure 3 shows the number of items per trial that were returned in the exact position they were displayed (time correct).
+
+```{r  figure three}
+
+time <- lmer(time_correct ~ condition + trial + (1|ID) + (1|session),
+             data = newdat, REML = FALSE)
+
+plot(Effect(c('trial', 'condition'), time))
+
+```
+
+We found that subjects were close to chance in all conditions in terms of the replacement order. However **is there a slightly higher rate in space-semantic-time?**
+
+Another effect of presentation order is a recency effect: are subjects more likely to remember the last word that was presented, since they had focused on it more recently, or the first word, since it was presented for longer?   
+
+
