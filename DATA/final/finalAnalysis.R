@@ -98,8 +98,7 @@ n <- 1
 for(i in seq_along(ids)){
   for(j in seq_along(ids[[i]])){
     k <- ids[[i]][[j]]
-    k$item1 <- apply(k[, c('cat1', 'src1')], 1, paste0, collapse = '.')
-    k$item0 <- apply(k[, c('cat0', 'src0')], 1, paste0, collapse = '.')
+
     s1 <- apply(k[, grep('1$', colnames(k))[1:4]], 1, function(zz) paste0(zz, collapse = '.'))
     s2 <- apply(k[, grep('0$', colnames(k))[1:4]], 1, function(zz) paste0(zz, collapse = '.'))
     
@@ -112,7 +111,6 @@ for(i in seq_along(ids)){
     s7 <- apply(k[, c('cat1', 'room1')], 1, function(zz) paste0(zz, collapse = '.'))
     s8 <- apply(k[, c('cat0', 'room0')], 1, function(zz) paste0(zz, collapse = '.'))
     
-    #ids[[i]][[j]]$time1 <- match(ids[[i]][[j]]$item1, ids[[i]][[j]]$item0)
     ids[[i]][[j]]$item_correct <- as.numeric(s1 %in% s2)
     ids[[i]][[j]]$time_correct <- as.numeric(s1 == s2)
     ids[[i]][[j]]$room_correct <- as.numeric(s3 %in% s4)
@@ -126,12 +124,6 @@ for(i in seq_along(ids)){
     newdat[n, 8] <- sum(ids[[i]][[j]]$cat_correct)/9
     newdat[n, 9] <- sum(ids[[i]][[j]]$cat_room_correct)/9
     n <- n + 1
-    
-    k1 <- ids[[i]][[j]][, 1:11]
-    k2 <- ids[[i]][[j]][, 12:16]
-    k3 <- ids[[i]][[j]][, -(1:16)]
-    
-    #ids[[i]][[j]] <- cbind(k1[match(k$item0, k$item1), ], k2, k3[match(k$item0, k$item1), ])
   }
 }
 
@@ -236,5 +228,92 @@ anova(recency1, recency2)
 # Putting items back in reverse order
 # First and last items displayed -- are these tracked differently?
 # Chance 1/9
+
+### REACTION TIME
+splam <- function(x){
+  if(is(x, 'list')){
+    x <- data.frame(do.call(rbind, lapply(x, function(z) data.frame(do.call(rbind, z)))))
+    rownames(x) <- 1:nrow(x)
+  } else {
+    x <- setNames(lapply(split(x, x$ID), function(z) setNames(split(z, z$trial), paste0('t', 1:90))), paste0('p', 1:56))
+    if(all(sapply(x, sapply, nrow) == 1)){x <- lapply(x, function(z) structure(do.call(rbind, z), row.names = 1:90))}
+  }
+  return(x)
+}
+
+sorder <- function(x, type = c('word', 'loc', 'time')){
+  splamit <- is(x, 'list')
+  if(isTRUE(splamit)){x <- splam(x)}
+  type <- match.arg(type)
+  z <- c('ID', 'session', 'trial', 'condition')
+  zc <- colnames(x)[endsWith(colnames(x), '_correct')]
+  if(length(zc) > 0){colnames(x)[which(colnames(x) == zc)] <- paste0(zc, '1')}
+  z1 <- colnames(x)[endsWith(colnames(x), '1')]
+  z0 <- colnames(x)[endsWith(colnames(x), '0')]
+  x <- splam(lapply(splam(x), function(j){
+    lapply(j, function(k){
+      if(type == 'word'){
+        k1 <- apply(k[, c('cat1', 'src1')], 1, paste0, collapse = '.')
+        k0 <- apply(k[, c('cat0', 'src0')], 1, paste0, collapse = '.')
+      } else {
+        k1 <- k[, paste0(type, '1')]
+        k0 <- k[, paste0(type, '0')]
+      }
+      kk <- match(k0, k1)
+      return(cbind(k[, z], k[kk, z1], k[, z0]))
+    })
+  }))
+  if(length(zc) > 0){
+    x <- data.frame(x[, setdiff(colnames(x), paste0(zc, '1'))], x[, paste0(zc, '1')])
+    colnames(x)[grep('_correct1$', colnames(x))] <- gsub('1', '', colnames(x)[grep('_correct1$', colnames(x))])
+  }
+  if(isTRUE(splamit)){x <- splam(x)}
+  return(x)
+}
+
+rts <- lapply(out, function(z){
+  z1 <- sapply(z, function(k){
+    k1 <- as.numeric(subset(k, stimulus == 'sort_trial')[, 'rt'])
+    if(length(k1) == 32){k1 <- k1[-(1:2)]}
+    return(k1)
+  })
+  data.frame(ID = rep(1:56, each = 30), 
+             trial = rep(1:30, 56), 
+             rt = c(z1))
+})
+rts$dat2$trial <- rts$dat2$trial + 30
+rts$dat3$trial <- rts$dat3$trial + 60
+rts <- data.frame(do.call(rbind, rts))
+rts <- structure(rts[order(rts$ID), ], row.names = 1:5040)
+rts$ID <- factor(rts$ID)
+newdat$rt <- rts$rt
+#saveRDS(newdat, 'simple2.RDS')
+newdat$rt <- scale(newdat$rt)
+
+cor(newdat[, grep('^rt$|_correct$', colnames(newdat))])
+
+scores <- sapply(splam(newdat), function(z) mean(z$item_correct))
+rts <- sapply(splam(newdat), function(z) mean(z$rt))
+cor.test(scores, rts)
+
+
+
+r0 <- lmer(item_correct ~ condition + trial + (1|ID) + (1|session),
+           data = newdat, REML = FALSE)
+r1 <- lmer(item_correct ~ condition + trial + rt + (1|ID) + (1|session),
+           data = newdat, REML = FALSE)
+
+anova(r0, r1) # Shows that reaction time adds information about performance
+
+r2 <- lmer(item_correct ~ condition + trial * rt + (1|ID) + (1|session),
+           data = newdat, REML = FALSE)
+r3 <- lmer(item_correct ~ condition * rt + trial + (1|ID) + (1|session),
+           data = newdat, REML = FALSE)
+r4 <- lmer(item_correct ~ condition * rt * trial + (1|ID) + (1|session),
+           data = newdat, REML = FALSE)
+
+anova(r1, r2) # Significant interaction between trial and reaction time
+anova(r1, r3) # No interaction between condition and trial
+anova(r2, r4) # No three-way interaction
 
 

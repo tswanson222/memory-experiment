@@ -8,7 +8,8 @@ splam <- function(x){
     x <- data.frame(do.call(rbind, lapply(x, function(z) data.frame(do.call(rbind, z)))))
     rownames(x) <- 1:nrow(x)
   } else {
-    x <- lapply(split(x, x$ID), function(z) split(z, z$trial))
+    x <- setNames(lapply(split(x, x$ID), function(z) setNames(split(z, z$trial), paste0('t', 1:90))), paste0('p', 1:56))
+    if(all(sapply(x, sapply, nrow) == 1)){x <- lapply(x, function(z) structure(do.call(rbind, z), row.names = 1:90))}
   }
   return(x)
 }
@@ -24,11 +25,15 @@ svar <- function(x, FUN = NULL, v = 'X'){
 }
 
 sorder <- function(x, type = c('word', 'loc', 'time')){
+  splamit <- is(x, 'list')
+  if(isTRUE(splamit)){x <- splam(x)}
   type <- match.arg(type)
   z <- c('ID', 'session', 'trial', 'condition')
+  zc <- colnames(x)[endsWith(colnames(x), '_correct')]
+  if(length(zc) > 0){colnames(x)[which(colnames(x) == zc)] <- paste0(zc, '1')}
   z1 <- colnames(x)[endsWith(colnames(x), '1')]
   z0 <- colnames(x)[endsWith(colnames(x), '0')]
-  splam(lapply(splam(x), function(j){
+  x <- splam(lapply(splam(x), function(j){
     lapply(j, function(k){
       if(type == 'word'){
         k1 <- apply(k[, c('cat1', 'src1')], 1, paste0, collapse = '.')
@@ -41,6 +46,12 @@ sorder <- function(x, type = c('word', 'loc', 'time')){
       return(cbind(k[, z], k[kk, z1], k[, z0]))
     })
   }))
+  if(length(zc) > 0){
+    x <- data.frame(x[, setdiff(colnames(x), paste0(zc, '1'))], x[, paste0(zc, '1')])
+    colnames(x)[grep('_correct1$', colnames(x))] <- gsub('1', '', colnames(x)[grep('_correct1$', colnames(x))])
+  }
+  if(isTRUE(splamit)){x <- splam(x)}
+  return(x)
 }
 
 
@@ -93,10 +104,138 @@ rts <- structure(rts[order(rts$ID), ], row.names = 1:5040)
 rts$ID <- factor(rts$ID)
 
 xx$rt <- rts$rt
-saveRDS(xx, 'simple3.RDS')
+colnames(xx) <- gsub('total', 'correct', colnames(xx))
+#saveRDS(xx, 'simple3.RDS')
 
 
-### ANALYSIS
-x <- readRDS('fullData3.RDS')
+#################################### ANALYSIS 
+x <- readRDS('fullData2.RDS')
+x$correct <- NULL
 
+perm <- function(v){
+  n <- length(v)
+  if(n == 1){
+    return(v)
+  } else {
+    X <- NULL
+    for(i in 1:n){X <- rbind(X, cbind(v[i], perm(v[-i])))}
+    X
+  }
+}
+
+triple <- function(v){matrix(rep(v, 3), ncol = 3)}
+
+combs <- perm(1:3)
+combs <- data.frame(t(cbind(triple(combs[, 1]), triple(combs[, 2]), triple(combs[, 3]))))
+
+
+codecat <- function(x){
+  cat2 <- factor(x$cat1)
+  levels(cat2) <- 1:3
+  as.numeric(as.character(cat2))
+}
+
+x <- svar(x, codecat, 'cat2')
+# ID 50, trial 1, example of ordering
+
+x <- splam(x)
+
+# Cat correlations
+out <- vector('list', length(x))
+for(i in seq_along(out)){
+  out[[i]] <- vector('list', length(x[[i]]))
+  for(j in seq_along(x[[i]])){
+    out[[i]][[j]] <- cor(x[[i]][[j]]$cat2, combs)
+  }
+  out[[i]] <- data.frame(trial = 1:90, do.call(rbind, out[[i]]))
+}
+cats <- data.frame(ID = rep(1:56, each = 90), do.call(rbind, out))
+
+# Room correlations
+out <- vector('list', length(x))
+for(i in seq_along(out)){
+  out[[i]] <- vector('list', length(x[[i]]))
+  for(j in seq_along(x[[i]])){
+    out[[i]][[j]] <- cor(x[[i]][[j]]$room1, combs)
+  }
+  out[[i]] <- data.frame(trial = 1:90, do.call(rbind, out[[i]]))
+}
+rooms <- data.frame(ID = rep(1:56, each = 90), do.call(rbind, out))
+
+# Uniques
+cats$uni <- apply(abs(cats[, -(1:2)]), 1, function(z) length(unique(z)))
+rooms$uni <- apply(abs(rooms[, -(1:2)]), 1, function(z) length(unique(z)))
+
+cats1 <- abs(cats[, c(1:5, 9)])
+rooms1 <- abs(rooms[, c(1:5, 9)])
+
+cats1$means <- rowMeans(cats1[, 3:5])
+colnames(cats1)[6:7] <- c('cats_uni', 'cats_means')
+rooms1$means <- rowMeans(rooms1[, 3:5])
+colnames(rooms1)[6:7] <- c('rooms_uni', 'rooms_means')
+
+y <- readRDS('fullData3.RDS')
+y <- sorder(y, 'word')
+y <- splam(y)
+out <- vector('list', length(y))
+for(i in seq_along(out)){
+  out[[i]] <- numeric(length(y[[i]]))
+  for(j in seq_along(y[[i]])){
+    out[[i]][j] <- cor(y[[i]][[j]]$time1, y[[i]][[j]]$time0)
+  }
+}
+
+final <- data.frame(cats1[, c(1, 2, 7)], rooms1[, 7, drop = FALSE], time = unlist(out))
+colnames(final)[3:5] <- c('cat_pattern', 'room_pattern', 'time_pattern')
+x <- splam(x)
+y <- splam(y)
+
+### CLUSTERING
+library(factoextra)
+library(cluster)
+#dat <- final[, 3:5]
+
+normal <- function(x){
+  (x - min(x))/(max(x) - min(x))
+}
+
+final2 <- final
+for(i in 3:5){
+  final2[, i] <- normal(final2[, i])
+}
+
+dat <- final2[, 3:5]
+
+# Determine optimal number of clusters
+fviz_nbclust(dat, kmeans, method = 'wss')
+
+set.seed(1)
+gap_stat <- clusGap(dat, FUN = kmeans, nstart = 25, K.max = 10, B = 50)
+#saveRDS(gap_stat, 'gap_stat2.RDS')
+fviz_gap_stat(gap_stat)
+
+# Perform clustering
+set.seed(1)
+km3 <- kmeans(dat, centers = 3, nstart = 25)
+set.seed(1)
+km4 <- kmeans(dat, centers = 4, nstart = 25)
+set.seed(1)
+km5 <- kmeans(dat, centers = 5, nstart = 25)
+
+fviz_cluster(km3, data = dat)
+fviz_cluster(km4, data = dat)
+fviz_cluster(km5, data = dat)
+
+aggregate(dat, by = list(cluster = km3$cluster), mean)
+aggregate(dat, by = list(cluster = km4$cluster), mean)
+aggregate(dat, by = list(cluster = km5$cluster), mean)
+
+final2$k3 <- km3$cluster
+final2$k4 <- km4$cluster
+final2$k5 <- km5$cluster
+
+# Reformat simple dataset
+xx$cat_room_correct <- NULL
+xx <- data.frame(xx, final[, -(1:2)], k3 = km3$cluster, k4 = km4$cluster, k5 = km5$cluster)
+#saveRDS(xx, 'simple4.RDS')
 
