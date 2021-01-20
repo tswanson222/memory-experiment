@@ -235,7 +235,46 @@ final2$k4 <- km4$cluster
 final2$k5 <- km5$cluster
 
 # Reformat simple dataset
+final3 <- setNames(final2[, 3:5], paste0(colnames(final2[, 3:5]), '_norm'))
 xx$cat_room_correct <- NULL
-xx <- data.frame(xx, final[, -(1:2)], k3 = km3$cluster, k4 = km4$cluster, k5 = km5$cluster)
-#saveRDS(xx, 'simple4.RDS')
+xx <- data.frame(xx, final[, -(1:2)], final3, k3 = km3$cluster, 
+                 k4 = km4$cluster, k5 = km5$cluster)
 
+#write.csv(xx, 'simpleFINAL.csv', row.names = FALSE)
+#saveRDS(xx, 'simpleFINAL.RDS')
+
+new3 <- structure(
+  data.frame(Value = unlist(xx[, 13:15]), 
+             Pattern = rep(c('Category', 'Room', 'Time'), each = nrow(xx)),
+             Cluster = rep(xx$k3, 3)), 
+  row.names = 1:(3 * nrow(xx))
+)
+new3$Pattern <- factor(new3$Pattern)
+new3$Cluster <- factor(new3$Cluster)
+levels(new3$Cluster) <- paste('Cluster', 1:3)
+
+new4 <- new3
+new4$Cluster <- rep(factor(xx$k4), 3)
+levels(new4$Cluster) <- paste('Cluster', 1:4)
+
+new5 <- new3
+new5$Cluster <- rep(factor(xx$k5), 3)
+levels(new5$Cluster) <- paste('Cluster', 1:5)
+
+
+pdf('ClusterDistributions.pdf', height = 7, width = 10)
+ggplot(new3, aes(x = Pattern, y = Value)) +
+  geom_boxplot(aes(fill = Pattern)) + 
+  facet_grid(~ Cluster) + theme_bw() +
+  ggtitle('Three-Cluster Solution')
+
+ggplot(new4, aes(x = Pattern, y = Value)) +
+  geom_boxplot(aes(fill = Pattern)) + 
+  facet_grid(~ Cluster) + theme_bw() +
+  ggtitle('Four-Cluster Solution')
+
+ggplot(new5, aes(x = Pattern, y = Value)) +
+  geom_boxplot(aes(fill = Pattern)) + 
+  facet_grid(~ Cluster) + theme_bw() +
+  ggtitle('Five-Cluster Solution')
+dev.off()
