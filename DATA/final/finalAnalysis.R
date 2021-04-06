@@ -21,7 +21,9 @@ source('extractData.R')
 out <- getData(getJSONS(), matchPs = TRUE)
 sorts <- lapply(out, lapply, getSorts)
 inits <- data.frame(do.call(rbind, lapply(
-  lapply(out, lapply, getInits), function(z) data.frame(do.call(rbind, z)))
+  lapply(out, lapply, getInits, rmPractice = TRUE), function(z){
+    data.frame(do.call(rbind, z))
+  })
 ))
 
 sorts$dat1 <- lapply(sorts$dat1, function(z){

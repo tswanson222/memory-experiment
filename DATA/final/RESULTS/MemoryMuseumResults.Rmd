@@ -1,0 +1,315 @@
+---
+title: "Memory Museum Results"
+#author: "Trevor James Swanson"
+date: "March 10, 2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+if(!require(ggplot2)){install.packages('ggplot2', dependencies = TRUE)}
+if(!require(lme4)){install.packages('lme4', dependencies = TRUE)} # v1.1-19
+if(!require(lsmeans)){install.packages('lsmeans', dependencies = TRUE)}
+if(!require(effects)){install.packages('effects', dependencies = TRUE)}
+if(!require(factoextra)){install.packages('factoextra', dependencies = TRUE)}
+if(!require(cluster)){install.packages('cluster', dependencies = TRUE)}
+if(!require(MCMCglmm)){install.packages('MCMCglmm', dependencies = TRUE)}
+if(!require(RLRsim)){install.packages('RLRsim', dependencies = TRUE)}
+if(!require(pbkrtest)){install.packages('pbkrtest', dependencies = TRUE)}
+if(!require(lattice)){install.packages('lattice', dependencies = TRUE)}
+
+splam <- function(x){
+  if(is(x, 'list')){
+    x <- data.frame(do.call(rbind, lapply(x, function(z) data.frame(do.call(rbind, z)))))
+    rownames(x) <- 1:nrow(x)
+  } else {
+    x <- setNames(lapply(split(x, x$ID), function(z) setNames(split(z, z$trial), paste0('t', 1:90))), paste0('p', 1:56))
+    if(all(sapply(x, sapply, nrow) == 1)){x <- lapply(x, function(z) structure(do.call(rbind, z), row.names = 1:90))}
+  }
+  return(x)
+}
+
+normal <- function(x){(x - min(x))/(max(x) - min(x))}
+
+kplot <- function(x, kvar = NULL, main = NULL, plot = TRUE, v = 1){
+  if(is.null(kvar)){
+    stopifnot('k' %in% colnames(x))
+    kvar <- 'k'
+  }
+  if(is(kvar, 'kmeans')){
+    x$kvar <- kvar$cluster
+    kvar <- 'kvar'
+  }
+  values <- c('cat_pattern', 'room_pattern', 
+              switch(v, 'time_pattern', c('time_forward', 'time_backward')))
+  if(any(grepl('norm', colnames(x)))){values <- paste0(values, '_norm')}
+  patterns <- c('Category', 'Room', 'Forward', 'Reverse')
+  if(v == 1){patterns <- c(patterns[1:2], 'Time')}
+  new <- structure(data.frame(
+    Value = unlist(x[, values]),
+    Pattern = factor(rep(patterns, each = nrow(x)), levels = patterns),
+    Cluster = factor(paste('Cluster', rep(x[, kvar], switch(v, 3, 4))))
+  ), row.names = 1:(switch(v, 3, 4) * nrow(x)))
+  if(plot){
+    require(ggplot2)
+    g <- ggplot(new, aes(x = Pattern, y = Value)) +
+      geom_boxplot(aes(fill = Pattern)) + 
+      facet_grid(~ Cluster) + theme_bw()
+    if(!is.null(main)){g <- g + ggtitle(main)}
+    new <- g
+  }
+  return(new)
+}
+```
+
+## Overview
+
+The study was split up into three sessions, which took place on three consecutive days. During each session, a participant completed 30 trials of the study; in the first session, however, participants also completed 2 practice trials of the Control (Chaos) condition. 
+
+63 people participated in the first session; 59 of those people also completed the second session, and 56 completed the third session. We only analyze data from those who completed all three sessions, and so our final sample is $N = 56$.
+
+Across sessions, there were 90 total trials of 5 conditions (18 trials per condition):
+
++ **Control**: Each consecutive word came from a different semantic category, and appeared in a different room.
++ **TimeSem**: Words from each semantic category were shown one after another, although appeared in different rooms.
++ **SpaceSem**: All words in a room were from the same semantic category, but each consecutive word would be from a different category and appear in a different room.
++ **SpaceTime**: All words in a room were from different semantic categories, but the ordering would fill up each room consecutively.
++ **SpaceSemTime**: All words in a room were from the same semantic category, and the rooms would fill up one by one.
+
+## Performance Distributions
+
+In terms of average performance across trials, 6 individuals had higher than 90% accuracy, and 2 of those individuals scored higher than 99%.
+
+```{r plots}
+x <- readRDS('../simpleFINAL.RDS')
+
+par(mfrow = c(2, 2))
+sess <- lapply(1:3, function(z) subset(x, session == z))
+for(i in 1:3){hist(sess[[i]]$item_correct, main = '', xlab = paste('Session', i))}
+idcorr <- sapply(lapply(split(x, x$ID), '[[', 'item_correct'), mean)
+plot(sort(idcorr), type = 'b', ylab = 'Average Overall Performance', xlab = '')
+```
+
+## Analyzing Predictors of Performance
+
+```{r lme0, eval = FALSE}
+# Test for one random effect
+m0 <- lm(item_correct ~ condition, data = x)
+m1 <- lmer(item_correct ~ condition + (1|ID), data = x, REML = FALSE)
+m2 <- lmer(item_correct ~ condition + (1|ID) + (1|session), data = x, REML = FALSE)
+
+RLRsim::exactLRT(m1, m0)
+
+# Test whether adding a random effect is good; refit with REML
+m2 <- update(m2, REML = TRUE)
+m1 <- update(m1, REML = TRUE)
+msess <- update(m2, . ~ . - (1|ID))
+RLRsim::exactRLRT(m = msess, mA = m2, m0 = m1)
+
+# Alternative: fit reduced model and repeatedly simulate from it to compute the differences between the deviation of the full and reduced model for each simualted dataset. Compare the null distribution to the observed deviance difference
+pb <- pbkrtest::PBmodcomp(m2, m1, nsim = 1000, seed = 1)
+```
+
+Mixed-effects models were fit in a stepwise fashion to determine which predictors improve an understanding of performance. For all models, two random intercepts are included: (1) A random intercept for participant ID, and (2) a random intercept for session.
+
+```{r lme}
+m0 <- lmer(item_correct ~ condition + (1|ID) + (1|session),
+           data = x, REML = FALSE)
+m1 <- lmer(item_correct ~ trial + (1|ID) + (1|session),
+           data = x, REML = FALSE)
+m2 <- lmer(item_correct ~ condition + trial + (1|ID) + (1|session),
+           data = x, REML = FALSE)
+m3 <- lmer(item_correct ~ condition * trial + (1|ID) + (1|session), 
+           data = x, REML = FALSE)
+```
+
+First, we see that condition is a significant predictor of performance.
+
+```{r anova1}
+anova(m0, m2)
+```
+
+We also see that trial is a significant predictor of performance, indicating the presence of a learning effect across the duration of the study.
+
+```{r anova2}
+anova(m1, m2)
+```
+
+We see, however, that there is no significant interaction between condition and trial. This means that we don't see a differential learning effect that varies across trial type.
+
+```{r anova3}
+anova(m2, m3)
+```
+
+### Incorporating Reaction Time
+
+First, we see that reaction time does not correlate strongly with any of the performance metrics. Also, it does not significantly correlate with overall average performance.
+
+```{r rt}
+x$rt <- scale(x$rt)
+cor(x[, grep('^rt$|_correct$', colnames(x))])
+rts <- sapply(splam(x), function(z) mean(z$rt))
+cor.test(idcorr, rts)
+```
+
+However, when added to the primary model predicting performance, reaction time does add informational value.
+
+```{r anova4}
+m4 <- lmer(item_correct ~ condition + trial + rt + (1|ID) + (1|session),
+           data = x, REML = FALSE)
+anova(m2, m4)
+```
+
+This shows the fixed effect estimates for each predictor, as well as the confidence intervals in the table below (I'll combine these into a single plot; it appears that I have to update my version of R to do so).
+
+```{r plotting}
+p <- profile(m4)
+
+#out <- confint(p)[-(1:4), ]
+#rownames(out) <- gsub('condition', '', rownames(out))
+#out <- data.frame(out[, 1, drop = FALSE], fixef(m4)[-1], out[, 2, drop = FALSE], check.names = FALSE)
+#colnames(out)[2] <- 'fixef'
+
+dotplot(fixef(m4)[-1], strip = FALSE)
+confint(p)[-(1:4), ]
+```
+
+Here we see the different slopes by condition for performance across trials.
+
+```{r trials}
+plot(Effect(c('trial', 'condition'), m4))
+```
+
+Lastly, we can see below the post-hoc effect estimates for the final model. Specifically, this shows which conditions differ significantly (or not) from one another.
+
+```{r post}
+lsmeans(m4, pairwise ~ condition, adjust = 'tukey')
+```
+
+
+
+
+```{r anova5, eval = FALSE}
+anova(m0, m2) # Is condition necessary, or only trial?
+anova(m1, m2) # Is trial necessary, or only condition?
+anova(m2, m3) # Are there interactions between trial and condition?
+
+lsmeans(m2, pairwise ~ condition, adjust = 'tukey')
+
+p2 <- profile(m2)
+lattice::xyplot(p2, aspect = 1.3)
+confint(p2)
+splom(p2)
+```
+
+```{r lme2, eval = FALSE}
+x2 <- x
+levels(x2$condition) <- 1:5
+m2 <- lmer(item_correct ~ condition + trial + (1|ID) + (1|session),
+           data = x2, REML = FALSE)
+
+plot(Effect(c('condition', 'trial'), m2))
+plot(Effect(c('trial', 'condition'), m2))
+```
+
+
+
+```{r other, eval = FALSE}
+time <- lmer(time_correct ~ condition + trial + (1|ID) + (1|session),
+             data = x, REML = FALSE)
+lsmeans(time, pairwise ~ condition, adjust = 'tukey')
+
+plot(Effect(c('trial', 'condition'), time))
+
+room <- lmer(room_correct ~ condition + trial + (1|ID) + (1|session),
+             data = x, REML = FALSE)
+lsmeans(room, pairwise ~ condition, adjust = 'tukey')
+
+catcor <- lmer(cat_correct ~ condition + trial + (1|ID) + (1|session),
+               data = x, REML = FALSE)
+lsmeans(catcor, pairwise ~ condition, adjust = 'tukey')
+
+dat <- readRDS('../fullData3.RDS')
+recency1 <- glmer(item_correct1 ~ condition + time1 + 
+                    (1|ID) + (1|session) + (1|trial), 
+                  data = dat, family = binomial)
+recency2 <- glmer(item_correct1 ~ condition * time1 + 
+                    (1|ID) + (1|session) + (1|trial), 
+                  data = dat, family = binomial)
+
+anova(recency1, recency2)
+```
+
+
+
+```{r rt0, eval = FALSE}
+x$rt2 <- scale(x$rt)
+cor(x[, grep('^rt2$|_correct$', colnames(x))])
+
+scores <- sapply(splam(x), function(z) mean(z$item_correct))
+rts <- sapply(splam(x), function(z) mean(z$rt2))
+cor.test(scores, rts)
+
+r0 <- lmer(item_correct ~ condition + trial + (1|ID) + (1|session),
+           data = x, REML = FALSE)
+r1 <- lmer(item_correct ~ condition + trial + rt2 + (1|ID) + (1|session),
+           data = x, REML = FALSE)
+
+anova(r0, r1) # Shows that reaction time adds information about performance
+
+r2 <- lmer(item_correct ~ condition + trial * rt2 + (1|ID) + (1|session),
+           data = x, REML = FALSE)
+r3 <- lmer(item_correct ~ condition * rt2 + trial + (1|ID) + (1|session),
+           data = x, REML = FALSE)
+r4 <- lmer(item_correct ~ condition * rt2 * trial + (1|ID) + (1|session),
+           data = x, REML = FALSE)
+
+anova(r1, r2) # Significant interaction between trial and reaction time
+anova(r1, r3) # No interaction between condition and trial
+anova(r2, r4) # No three-way interaction
+```
+
+## Clustering by Strategy
+
+Four variables were used to perform k-means clustering. The analysis of average silhouettes indicated that 3 clusters is the optimal number. Below that plot we see a plot that shows how distinct the 3 clusters are from each other, and then finally we see the characteristics of each cluster based on the four dimensions.
+
+```{r reclust, eval = TRUE}
+# Add time variables and reformat data
+x <- readRDS('../simpleFINAL.RDS')
+x$time_forward_norm <- normal(ifelse(x$time_pattern < 0, 0, x$time_pattern))
+x$time_backward_norm <- normal(abs(ifelse(x$time_pattern > 0, 0, x$time_pattern)))
+
+out <- x[, grep('norm', colnames(x))]
+x <- x[, setdiff(colnames(x), c(colnames(out), gsub('_norm', '', colnames(out))))]
+x <- data.frame(x, out)
+colnames(x) <- gsub('_norm', '', colnames(x))
+x <- x[, -grep('^k', colnames(x))]
+
+dat1 <- x[, grep('pattern', colnames(x))]
+dat2 <- x[, c(grep('pattern', colnames(x))[1:2], grep('ward', colnames(x)))]
+
+# Determine optimal number of clusters
+#fviz_nbclust(dat2, kmeans, method = 'wss')
+fviz_nbclust(dat2, kmeans, method = 'silhouette') # 3
+#set.seed(1)
+#gap_stat <- clusGap(dat2, FUN = kmeans, nstart = 25, K.max = 10, B = 500)
+#gap_stat <- readRDS('../gap_stat3.RDS')
+#fviz_gap_stat(gap_stat)
+
+# Cluster!
+#set.seed(1)
+#k3.1 <- kmeans(dat1, centers = 3, nstart = 25)
+#fviz_cluster(k3.1, data = dat1)
+
+set.seed(1)
+k3.2 <- kmeans(dat2, centers = 3, nstart = 25)
+fviz_cluster(k3.2, data = dat2)
+
+#x$k1 <- k3.1$cluster
+x$k2 <- k3.2$cluster
+
+#kplot(x, 'k1', v = 1)
+kplot(x, 'k2', v = 2)
+```
+
+
