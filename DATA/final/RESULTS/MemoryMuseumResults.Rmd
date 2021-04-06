@@ -17,6 +17,7 @@ if(!require(MCMCglmm)){install.packages('MCMCglmm', dependencies = TRUE)}
 if(!require(RLRsim)){install.packages('RLRsim', dependencies = TRUE)}
 if(!require(pbkrtest)){install.packages('pbkrtest', dependencies = TRUE)}
 if(!require(lattice)){install.packages('lattice', dependencies = TRUE)}
+if(!require(sjPlot)){install.packages('sjPlot', dependencies = TRUE)}
 
 splam <- function(x){
   if(is(x, 'list')){
@@ -160,18 +161,26 @@ m4 <- lmer(item_correct ~ condition + trial + rt + (1|ID) + (1|session),
 anova(m2, m4)
 ```
 
-This shows the fixed effect estimates for each predictor, as well as the confidence intervals in the table below (I'll combine these into a single plot; it appears that I have to update my version of R to do so).
+This shows the standardized fixed effect estimates for each predictor along with their 95% confidence intervals. 
 
-```{r plotting}
-p <- profile(m4)
+```{r plotting, eval = TRUE}
+#p <- profile(m4)
 
 #out <- confint(p)[-(1:4), ]
 #rownames(out) <- gsub('condition', '', rownames(out))
 #out <- data.frame(out[, 1, drop = FALSE], fixef(m4)[-1], out[, 2, drop = FALSE], check.names = FALSE)
 #colnames(out)[2] <- 'fixef'
 
-dotplot(fixef(m4)[-1], strip = FALSE)
-confint(p)[-(1:4), ]
+g <- suppressMessages(
+  plot_model(m4, type = 'std', 
+             title = 'Standardized Fixed Effect Estimates', 
+             sort.est = TRUE, vline.color = 'gray80') + 
+    ylim(-.1, .25) + theme_bw()
+)
+g
+
+#dotplot(fixef(m4)[-1], strip = FALSE)
+#confint(p)[-(1:4), ]
 ```
 
 Here we see the different slopes by condition for performance across trials.
