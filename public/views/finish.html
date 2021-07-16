@@ -1,0 +1,82 @@
+<!doctype html>
+<html>
+<head>
+<style>
+@import url(https://fonts.googleapis.com/css?family=Open+Sans:400italic,700italic,400,700);
+body {font-family:'Open Sans', 'Arial', sans-serif;
+        font-size: 18px;
+        line-height: 1.6em;
+        margin: 50px;}
+</style>
+<script language="javascript">
+var session = 1;
+var day = 0;
+
+function debrief(){
+	if(session !== 3){
+		document.getElementById("debriefing").remove();
+		if(session == 1){
+			document.getElementById("sessionTwo").remove();
+		} else {
+			document.getElementById("sessionOne").remove();
+		}
+	} else {
+		document.getElementById("sessionOne").remove();
+		document.getElementById("sessionTwo").remove();
+	}
+}
+
+</script>
+</head>
+<body onload='debrief()'>
+	
+<p ALIGN=CENTER> Thank you for your participation! Your MTurk completion code is: </p>
+<p ALIGN=CENTER style='font-size:30px'><b> M73A25 </b></p>
+<p ALIGN=CENTER> Please enter this number into the appropriate field on the MTurk HIT. </p>
+<p ALIGN=CENTER><u><b> Your responses have been successfully recorded. You may close this window at any time. </b></u></p><br>
+
+<div id="sessionOne">
+<p>
+You have now completed Session 1 of this three-part study. Your participation is important because it helps contribute to our understanding of the different psychological factors 
+that influence the ability to remember information. If you have any questions about the study, please send an email to the primary investigator (Dr. Sarah Robins) at skrobins@ku.edu. 
+You will be provided with more details about the study upon completing Session 3.
+</p>
+<p>
+You will receive $8 for completing today's session. You will earn an additional $9 after completing Session 2, and $10 after completing Session 3.
+You will receive an email tomorrow morning with more information about how to complete the next session.
+</p>
+</div>
+
+<div id="sessionTwo">
+<p>
+You have now completed Session 2 of this three-part study. Your participation is important because it helps contribute to our understanding of the different psychological factors 
+that influence the ability to remember information. If you have any questions about the study, please send an email to the primary investigator (Dr. Sarah Robins) at skrobins@ku.edu. 
+You will be provided with more details about the study upon completing Session 3.
+</p>
+<p>
+You will receive $9 for completing today's session, as well as an additional $10 after completing Session 3.
+You will receive an email tomorrow morning with more information about how to complete the final session.
+</p>
+</div>
+
+<div id="debriefing">
+<p> 
+Thank you for your participation in this study. Your participation is important because it helps contribute to our understanding of the different psychological factors 
+that influence the ability to remember information. We hope that by seeing how people perform on the task that you completed today will help us learn more about the ways that 
+people structure information that they want to recall. Our overarching goal was to compare three different factors that we believe influence remembering: temporal order, 
+spatial arrangement, and semantic relatedness. All participants saw the same museum floor plans, but there were differences in the museum details across trials. 
+However, the general format of the task was the same for everyone. We simply varied whether the items appeared in a specific order, specific locations, or featured words 
+with different semantic relationships. This experiment is part of some exploratory research about the nature of human remembering; we did not design the task with particular 
+hypotheses in mind. We hope that the results of this study will lead to an understanding of human memory that can support such hypothesizing and discovery in the future. 
+All of the responses that you have provided throughout this study will kept completely confidential, and will not be linked in any with your name or other personal information. 
+</p>
+
+<p>
+If you have any questions about this study, or are interested in learning more about anything regarding these procedures, feel free to contact the principal investigator 
+Dr. Sarah Robins (skrobins@ku.edu) at any time. Any further questions about your rights as a participant may be directed to the 
+Institutional Review Board at KU which has approved this study: they may be reached at (785)-864-7429, or (785)-864-7385, or by email at irb@ku.edu. 
+</p>
+</div>
+
+</body>
+</html>

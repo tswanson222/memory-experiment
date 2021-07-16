@@ -1,0 +1,721 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8">
+		<title>Memory Museum</title>
+		<script src="jsPsych/jspsych.js"></script>
+		<script src="jsPsych/plugins/jspsych-free-sort.js"></script>
+		<script src="jsPsych/plugins/jspsych-html-keyboard-response.js"></script>
+		<script src="jsPsych/plugins/jspsych-image-keyboard-response.js"></script>
+		<script src="jsPsych/plugins/jspsych-animation.js"></script>
+		<script src="jsPsych/plugins/jspsych-html-button-response.js"></script>
+		<script src="jsPsych/plugins/jspsych-instructions.js"></script>
+		<script src="jsPsych/plugins/jspsych-survey-multi-choice.js"></script>
+		<script src="jsPsych/plugins/jspsych-survey-multi-select.js"></script>
+		<script src="jsPsych/plugins/jspsych-survey-text.js"></script>
+		<script src="jsPsych/jquery-1.12.4.js"></script>
+		<script src="jsPsych/jquery-ui.js"></script>
+		<link rel="stylesheet" href="jsPsych/css/jspsych.css" type="text/css"></link>
+	</head>
+	<body></body>
+	<script>
+	
+	////////////////////////////////////////////////////////////////////
+	//////////////////////// INITIAL SETTINGS //////////////////////////
+	////////////////////////////////////////////////////////////////////
+	var session = 1;
+	var trialsPerCondition = 6;
+	var firstSlideTime = 1100; // 1100
+	var timePerWord = 1100; // 1100
+	var lastSlideTime = 10000; // 10000
+	var flanker_time = 900; // 900
+	var disableButton = true; // true
+	var distractorDebrief = false; // false
+	var breakTime = .5; // in minutes
+	var betweenSubjectsCondition = 0; // 0 for within-subjects
+	var requireDemos = true; // true
+	
+	
+	////////////////////////////////////////////////////////////////////
+	//////////////////////////// TESTING ///////////////////////////////
+	////////////////////////////////////////////////////////////////////
+	var quick = false; // change to 'true' to speed up for testing
+	if(quick == true){firstSlideTime = 10; timePerWord = 10; lastSlideTime = 10; flanker_time = 10; disableButton = false; breakTime = .25; trialsPerCondition = 3}
+	var testOneTrial = false; // change to 'true' to test one trial without flanker task or instructions
+	var repeatOneTrial = 1; // if testOneTrial == true, this is the number of trials you want to view
+	var conditionOneTrial = 1; // choose a number 1-5 of the condition you would like to test
+	// Condition 1 = Space + Semantics + Time
+	// Condition 2 = Space + Time
+	// Condition 3 = Space + Semantics
+	// Condition 4 = Time + Semantics
+	// Condition 5 = None (control condition)
+	
+	
+	////////////////////////////////////////////////////////////////////
+	//////////////////////// STATIC SETTINGS ///////////////////////////
+	////////////////////////////////////////////////////////////////////
+	jsPsych.data.addProperties({session: session});
+	var randomizationOption = 4; // 1 = total randomization of all trials; 2 = shuffleNoRepeats of all trials; 3 = show all conditions in random sets; 4 = same as 3 but with no repeats
+	var zeroone = [];
+	if(distractorDebrief == false){zeroone = 0} else {zeroone = 1};
+	if(session == 1){
+		var practiceConditions = [5, 5];
+		var ptrials = practiceConditions.length;
+		if(ptrials == 2){var ptrialGrammar = "both"} else {var ptrialGrammar = "all "+ptrials+""};
+	} else {
+		var ptrials = 0;
+	}
+	var totalTrials = (trialsPerCondition * 5) + ptrials;
+	var postBreakProp = .4;
+	if(trialsPerCondition == 2){postBreakProp = .5}
+	var postTrialsPerCondition = 0;
+	if(breakTime !== 0 && trialsPerCondition > 1){
+		postTrialsPerCondition = Math.floor(trialsPerCondition * postBreakProp);
+		trialsPerCondition = trialsPerCondition - postTrialsPerCondition;
+		breakTime = Math.round(breakTime * 60 * 1000);
+	} else {
+		breakTime = 0;
+	};
+	var numWords = 9;
+	var wordWidth = 100;
+	var wordHeight = 30;
+	var backgroundImage = ["img/museum1.png"];
+	var sortWidth = 1100;
+	var sortHeight = 540;
+	var imageWidth = 730;
+	var imageHeight = 530;
+	var flanker_reps = 1;
+	var flankerImages = ["img/con1.png", "img/con2.png", "img/inc1.png", "img/inc2.png"];
+	var allWords = "hour,minute,second,year,day,century,month,decade,week,eon,era,score,age,epoch,period,night,moment,clock,moon,evening;iron,copper,steel,tin,zinc,brass,lead,bronze,nickel,sodium,mercury,cobalt,ore,cadmium,lithium,alloy,calcium,barium,chrome,pewter;book,novel,journal,article,letter,play,essay,poem,leaflet,fiction,poster,bible,poetry,note,booklet,digest,history,report,thesis,sign;cat,cow,lion,tiger,pig,bear,mouse,rat,deer,sheep,giraffe,goat,zebra,wolf,donkey,rabbit,leopard,mule,fox,bull;blue,red,green,yellow,black,purple,white,pink,brown,gray,indigo,maroon,tan,beige,aqua,magenta,olive,mauve,navy,scarlet;spoon,fork,pan,pot,spatula,stove,bowl,mixer,cup,dish,beater,plate,skillet,sink,toaster,ladle,oven,saucer,blender,sifter;chair,table,bed,sofa,desk,lamp,couch,dresser,stool,bureau,rug,cabinet,buffet,radio,stereo,picture,bench,divan,hassock,lounge;legs,arms,head,eye,nose,finger,ear,toe,mouth,stomach,hair,neck,heart,knee,liver,brain,lungs,tooth,elbow,face;rifle,bomb,club,sword,pistol,cannon,spear,fists,stick,poison,missile,bayonet,whip,arrow,stone,bazooka,shotgun,pipe,bow,dagger;tent,hut,hotel,home,motel,shack,mansion,cottage,igloo,cabin,tepee,castle,duplex,adobe,palace,abode,rambler,pueblo,slum,tree;beer,whiskey,gin,wine,vodka,bourbon,scotch,rum,brandy,rye,ale,martini,liqueur,sherry,liquor,daquiri,tequila,cognac,sake,port;murder,rape,robbery,theft,assault,arson,larceny,killing,battery,felony,forgery,treason,fraud,suicide,perjury,lying,bigamy,beating,holdup,incest;saw,nails,level,plane,chisel,ruler,wrench,pliers,drill,screws,pencil,square,file,lathe,awl,crowbar,sander,plumb,wedge,vise;salt,pepper,sugar,garlic,vanilla,cloves,paprika,spices,oregano,ketchup,mustard,accent,nutmeg,vinegar,butter,thyme,almond,herbs,sage,chives;oil,gas,coal,alcohol,atom,oxygen,food,steam,butane,propane,methane,petrol,peat,air,benzene,carbon,ethyl,octane,fire,leaves;doctor,lawyer,teacher,dentist,nurse,plumber,clerk,farmer,laborer,chemist,banker,fireman,manager,judge,writer,janitor,artist,baker,senator,grocer;hill,valley,river,lake,canyon,cliff,ocean,plain,volcano,plateau,gully,stream,sea,desert,crevice,island,cavern,glacier,ravine,ridge;tennis,soccer,golf,hockey,track,bowling,archery,skiing,fencing,fishing,polo,boxing,rugby,hunting,racing,sailing,boating,pool,diving,judo;tornado,rain,snow,hail,sleet,storm,wind,cyclone,clouds,typhoon,thunder,fog,monsoon,sunny,hot,drought,heat,ice,rainbow,clear;shirt,pants,shoes,blouse,skirt,coat,dress,hat,sweater,tie,slip,jacket,slacks,gloves,belt,shorts,bra,scarf,suit,vest;window,door,roof,wall,floor,ceiling,brick,hall,stair,chimney,steps,attic,cement,closet,corner,beams,kitchen,lights,side,cellar;trumpet,violin,flute,guitar,oboe,tuba,harp,cello,banjo,organ,viola,horn,piccolo,cymbals,bassoon,cornet,fiddle,bugle,ukulele,bells;jazz,popular,folk,opera,blues,modern,country,waltz,western,baroque,concert,march,sonata,dance,fast,slow,chamber,ballad,mood,song;robin,sparrow,eagle,crow,canary,hawk,wren,oriole,parrot,pigeon,vulture,swallow,chicken,dove,duck,owl,redbird,thrush,falcon,jay;milk,coffee,tea,pepsi,7up,soda,juice,punch,teem,sprite,cocoa,limeade,malt,cola,eggnog,squirt,cider,tab,like,lime;bus,ship,auto,taxi,cart,jeep,jet,cab,subway,honda,feet,sled,cycle,rocket,van,ford,canoe,buggy,el,raft;doll,ball,game,bat,top,jacks,puzzle,rattle,marbles,animals,books,dishes,cards,crayons,glove,ships,clay,kite,knives,puppet;carrot,pea,corn,bean,potato,lettuce,spinach,celery,cabbage,beets,turnip,kale,peppers,greens,rice,okra,peanut,rhubarb,avocado,pickle;shoe,boots,sandals,loafers,rubbers,thongs,flats,skis,heels,oxfords,pumps,cleats,nylons,spikes,clogs,weejuns,hose,peds,brake,mukluk;fly,ant,bee,spider,beetle,roach,wasp,ladybug,gnat,moth,flea,bug,termite,hornet,cricket,tick,worm,louse,aphid,mite;daisy,orchid,lily,pansy,petunia,iris,lilac,peony,azalea,poppy,zinnia,jonquil,aster,begonia,crocus,posy,dahlia,flag,wild,bloom;cancer,measles,polio,mumps,malaria,flu,leprosy,typhoid,cholera,rickets,virus,rabies,tetanus,plague,scurvy,typhus,asthma,palsy,stroke,cough;oak,maple,pine,elm,birch,spruce,redwood,walnut,fir,hickory,ash,poplar,willow,cedar,palm,beech,plum,gingo,sequoia,holly;trout,shark,herring,catfish,perch,salmon,tuna,sunfish,whale,cod,carp,pike,minnow,guppy,marlin,shrimp,shad,spot,lobster,haddock";
+	allWords = allWords.split(";");
+	for(var i = 0; i < allWords.length; i++){allWords[i] = allWords[i].toUpperCase().split(",")};
+	
+	// GET START DATE + TIME
+	var day = 0; // this value is set manually
+	var today = new Date();
+	var date = today.getFullYear()+'-'+(today.getMonth()+1)+'-'+today.getDate();
+	var time = today.getHours() + ":" + today.getMinutes() + ":" + today.getSeconds();
+	var dateTime = date+' '+time;
+	jsPsych.data.addProperties({startTime: dateTime});
+	
+	// Attention check stimuli
+	var attn_words = ["ZEBRA", "PORCUPINE", "LION", "MONKEY", "ELEPHANT", "SEAL", "OTTER", "FISH", "SHEEP", "MOUSE"];
+	var attn_word_select = jsPsych.randomization.sampleWithoutReplacement(attn_words, 1, false);
+	jsPsych.data.addProperties({attn_word: attn_word_select});
+	
+	// Set up instructions based on session number
+	var consentSession = ""; var instrucZero = ""; var instrucOne = ""; var money = "";
+	if(session == 1){
+		consentSession += "There will be "+ptrials+" practice trials followed by "+(totalTrials - ptrials)+" official trials.";
+		instrucZero += "<p>You will receive an email tomorrow morning ";
+		if(day !== 0){instrucZero += "<strong>("+day+")</strong> "}
+		instrucZero += "with instructions for completing the next session.</p>";
+		instrucOne += "<p>You will begin by completing "+ptrials+" practice trials, followed by "+(totalTrials - ptrials)+" real trials of the game.</p>";
+		money += "$8";
+	} else if(session == 2){
+		consentSession += "For today's session there will not be any practice trials.";
+		instrucZero += "<p>You will receive an email tomorrow morning ";
+		if(day !== 0){instrucZero += "<strong>("+day+")</strong> "}
+		instrucZero += "with instructions for completing the final session.</p>";
+		instrucOne += "<p>You will be playing the same memory game as in the previous session.</p><p>There will not be any practice trials at the beginning of the game.</p>";
+		money += "$9";
+	} else if(session == 3){
+		consentSession += "For today's session there will not be any practice trials.";
+		instrucZero += "<p><strong>This is the final session of the study.</strong></p>";
+		instrucOne += "<p>You will be playing the same memory game as in the previous sessions.</p><p>There will not be any practice trials at the beginning of the game.</p>";
+		money += "$10";
+	}
+	
+	////////////////////////////////////////////////////////////////////
+	/////////////////////////// INSTRUCTIONS ///////////////////////////
+	////////////////////////////////////////////////////////////////////
+	var welcome = {
+		type: 'html-keyboard-response',
+		stimulus: "Welcome to the experiment. Press any key to begin.",
+		on_finish: function(data){data.stimulus = "welcome"}
+	};
+	
+	var consentResponse = [];
+	var consent = {
+		type: 'html-button-response',
+		choices: ['Yes, I agree', 'No, I do not agree'],
+		stimulus: "<h4 ALIGN=CENTER>Title of Study: Investigating Memory Structure (Session "+session+")</h4>"+
+		"<p ALIGN=LEFT>INTRODUCTION</p>"+
+		"<c2>The Department of Philosophy at the University of Kansas supports the practice of protection for human subjects<br>"+
+		"participating in research. The following information is provided for you to decide whether you wish to participate<br>"+
+		"in the present study. You should be aware that even if you agree to participate, you are free to withdraw at any time<br>"+
+		"without penalty.</c2>"+
+		"<c1>PURPOSE OF THE STUDY</c1>"+
+		"<c2>We are investigating how people structure information so as to better remember it.</c2>"+
+		"<c1>PROCEDURES</c1>"+
+		"<c2>During today's session, you will be asked to engage in "+totalTrials+" trials of a memory task, wherein you will be shown a floor<br>"+
+		"plan of a &#34;museum&#34; with a variety of written words arranged in various locations. The task will begin by showing<br>"+
+		"you the locations of these words, one by one, and then the words will disappear from the museum and you will<br>"+
+		"be prompted to place them back in the correct location. At the completion of each trial you will receive feedback<br>"+
+		"on your performance. "+consentSession+" Between the initial exposure<br>"+
+		"to the items and the recall test you will be asked to complete a simple reaction time task before continuing on to<br>"+
+		"the next trial. It is estimated that this will take no longer than 60 minutes. Immediately following your participation<br>"+
+		"in the final session, you will be provided with more detailed information concerning the study. Your participation is<br>"+
+		"solicited although strictly voluntary. You are free to stop participating at any time during the study without any<br>"+
+		"penalty for doing so. The researchers will immediately inform you if any new information surfaces that may affect<br>"+
+		"your willingness to participate.</c2>"+
+		"<c1>RISKS</c1>"+
+		"<c2>There are no apparent risks to participants in this study.</c2>"+
+		"<c1>BENEFITS</c1>"+
+		"<c2>Although participation will not directly benefit you, we anticipate that the information you provide will be useful<br>"+
+		"in understanding how people structure and remember information.</c2>"+
+		"<c1>PAYMENT TO PARTICIPANTS</c1>"+
+		"<c2>You will be paid "+money+" for your participation in today's study. Investigators may ask for your social security number in<br>"+
+		"order to comply with federal and state tax and accounting regulations.</c2>"+
+		"<c1>PARTICIPANT CONFIDENTIALITY</c1>"+
+		"<c2>We assure you that your name will not be associated in any way with the research findings. The information you<br>"+
+		"provide will not include any identifying information about you other than some basic demographic information.<br>"+
+		"Your name will not be associated in any way with the research findings. Your identifiable information will not be<br>"+
+		"shared unless (a) it is required by law or university policy, or (b) you give written permission. Your name will not<br>"+
+		"be associated in any publication or presentation with the information collected about you or with the research<br>"+
+		"findings from this study. It is possible, however, with internet communications, that through intent or accident<br>"+
+		"someone other than the intended recipient may see your response.</c2>"+
+		"<c1>CANCELLING THIS CONSENT AND AUTHORIZATION</c1>"+
+		"<c2>You may withdraw your consent to participate in this study at any time. You also have the right to cancel your<br>"+
+		"permission to use and disclose further information collected about you, in writing, at any time, by sending your<br>"+
+		"written request to Sarah Robins, Principal Investigator, at the address listed at the end of this consent form. If you<br>"+
+		"cancel permission to use your information, the researchers will stop collecting additional information about you.</c2>"+
+		"<c1>QUESTIONS ABOUT PARTICIPATION</c1>"+
+		"<c2>Questions about procedures should be directed to the researcher listed at the end of this consent form.</c2>"+
+		"<c1>PARTICIPANT CERTIFICATION</c1>"+
+		"<c2>I have read this Consent and Authorization form. I have had the opportunity to ask, and I have received answers to,<br>"+
+		"any questions I had regarding this study. I understand that if I have any additional questions about my rights as a<br>"+
+		"research participant, I may call (785) 864-7429 or (785) 864-7385, write the Human Research Protection Program<br>"+
+		"(HRPP), University of Kansas, 2385 Irving Hill Road, Lawrence, Kansas 66045-7568, or email <u>irb@ku.edu</u>.</c2>"+
+		"<c2 style='margin-top: -5px'>I agree to take part in this study as a research participant. By clicking 'Yes, I agree' in the box below I affirm my<br>"+
+		"willingness to participate, that I am at least 18 years old, and that I have read and understood this Consent<br>"+
+		"and Authorization form.</c2>"+
+		"<c2 style='margin-top: 40px'><u>Researcher Contact Information:</u><br>Dr. Sarah Robins<br>Principal Investigator<br>Philosophy Dept.<br>3072 Wescoe Hall<br>University of Kansas<br>Lawrence, KS 66045<br>785-864-3976</c2>",
+		on_finish: function(data){
+			var consentProvided = true;
+			if(data.button_pressed == "1"){
+				consentProvided = false;
+				jsPsych.endExperiment('You have declined to participate in this study. You may close this window at any time.');
+			};
+			consentResponse.push(consentProvided);
+			data.stimulus = "consent";
+		}
+	};
+	
+	var instructions = {
+		type: 'instructions',
+		pages: function(){
+			var allPages = [];
+			var pZero = ""; var pOne = ""; var pTwo = ""; var pThree = ""; var pFour = ""; var pFive = "";
+			pZero += "<h4 ALIGN=CENTER>INSTRUCTIONS</h4>"+
+				"<p>Hello! Thank you for your participation.</p>"+
+				"<p>This study lasts for three sessions in total. Today you will be completing <strong>Session "+session+"</strong>.</p>"+instrucZero+"<p>"+
+				"<p>You will be awarded "+money+" for completing today's session.</p><br>";
+			pOne += "<h4 ALIGN=CENTER>INSTRUCTIONS</h4>"+
+				"<p>In today's session you will be asked to complete <strong>"+totalTrials+" trials</strong> of a memory game.</p>"+instrucOne+"<br>";
+			pTwo += "<h4 ALIGN=CENTER>INSTRUCTIONS</h4>"+
+				"<p>For each trial, you will see an image of a museum floorplan.</p>"+
+				"<p>Then, words will appear randomly in different locations on your screen.</p>"+
+				"<p><strong>As the words appear, do your best to remember the specific location of each word.</strong></p><br>";
+			pThree += "<h4 ALIGN=CENTER>INSTRUCTIONS</h4>"+
+				"<p>After seeing the museum, you will be asked to complete a short task before returning to the museum.</p>"+
+				"<p>You must then drag and drop each word back to its original location.</p>"+
+				"<p>Note that once you place a word onto a location, you cannot change it for the remainder of the trial.</p>"+
+				"<p><strong>For each trial, your goal is to remember the locations of as many words as possible.</strong></p><br>";
+			pFour += "<h4 ALIGN=CENTER>INSTRUCTIONS</h4>"+
+				"<p><strong><u>Please refrain from using an external aid (e.g., pen & paper; a mobile phone) during the task.</u></strong></p>"+
+				"<p>We're interested in how well you can remember the words on your own,<br>so please do not write anything down or use your phone.</p><br>";
+			pFive += "<p style='font-size:50px'><strong>"+attn_word_select+"</strong></p>"+
+				"<p><u>Please do your best to remember this word for the duration of the session.</u></p>"+
+				"<p>At the end of this session, you will be asked to recall this word to confirm that you were paying attention.</p><br>";
+			allPages.push(pZero); allPages.push(pOne); allPages.push(pTwo); allPages.push(pThree); allPages.push(pFour); allPages.push(pFive);
+			if(session == 1){
+				var pSix = "<p>The following "+ptrials+" trials will be for PRACTICE, and will not count toward your final score.</p>"+
+				"<p><strong>Click 'Next' as soon as you're ready to begin.</strong></p><br>";
+				allPages.push(pSix);
+			}
+			return allPages;
+		},
+		show_clickable_nav: true,
+		show_page_number: true,
+		on_finish: function(data){data.stimulus = "instructions"}
+	};
+	
+	var finalInstructions = {
+		type: 'html-button-response',
+		stimulus: function(){
+			var finalMessage = "";
+			var realTrials = "";
+			if(session == 1){
+				finalMessage += "<p><strong>You have now completed "+ptrialGrammar+" practice trials.</strong></p><br>";
+				realTrials += "real trials";
+			} else {
+				realTrials += "trials";
+			}
+			finalMessage += "<p>Once you click the button below, the "+realTrials+" will begin.<br>";
+			if(session !== 1){finalMessage += "<br>"}
+			finalMessage += "There will be a total of <strong>"+(totalTrials - ptrials)+" trials</strong> to complete.</p>";
+			if(breakTime !== 0){finalMessage += "<p>You will receive a short break after completing <strong>"+(trialsPerCondition * 5)+" trials</strong>.</p>"};
+			finalMessage += "<br><p>Click the button when you are ready to begin.</p>";
+			return finalMessage;
+		},
+		choices: ['Begin'],
+		on_finish: function(data){data.stimulus = "finalInstructions"}
+	};
+	
+	var breakInstructions = {
+		timeline: [{
+			type: 'html-keyboard-response',
+			stimulus: breakTime/1000,
+			countdown: true,
+			prompt: "<p>Please take a short break before continuing with the study.</p>"+
+			"<p>Once the timer runs out, you will be able to complete the remaining <strong>"+(postTrialsPerCondition * 5)+" trials</strong>.</p><br>",
+			prompt_location: 'above',
+			trial_duration: breakTime,
+			response_ends_trial: false,
+			on_finish: function(data){data.stimulus = "breakStart"}
+		}, {
+			type: 'html-button-response',
+			stimulus: "<p>You may now complete the remaining trials. Click the button to continue.</p><br>",
+			choices: ['Continue'],
+			on_finish: function(data){data.stimulus = "breakEnd"}
+		}]
+	};
+
+	
+	////////////////////////////////////////////////////////////////////
+	//////////////////////// SETUP CONDITIONS //////////////////////////
+	////////////////////////////////////////////////////////////////////
+	var setup1 = {
+		type: 'animation',
+		words: allWords,
+		num_words: numWords,
+		sort_area_width: sortWidth,
+		sort_area_height: sortHeight,
+		stim_width: wordWidth,
+		stim_height: wordHeight,
+		imageWidth: imageWidth,
+		imageHeight: imageHeight,
+		background: backgroundImage,
+		first_slide_time: firstSlideTime,
+		time_per_word: timePerWord,
+		last_slide_time: lastSlideTime,
+		condition: 1,
+		prompt: "<p>Watch the locations of the words as they appear on your screen.</p>",
+		on_finish: function(data){data.stimulus = "setup1"}
+	};
+	
+	var setup2 = {
+		type: 'animation',
+		words: allWords,
+		num_words: numWords,
+		sort_area_width: sortWidth,
+		sort_area_height: sortHeight,
+		stim_width: wordWidth,
+		stim_height: wordHeight,
+		imageWidth: imageWidth,
+		imageHeight: imageHeight,
+		background: backgroundImage,
+		first_slide_time: firstSlideTime,
+		time_per_word: timePerWord,
+		last_slide_time: lastSlideTime,
+		condition: 2,
+		prompt: "<p>Watch the locations of the words as they appear on your screen.</p>",
+		on_finish: function(data){data.stimulus = "setup2"}
+	};
+	
+	var setup3 = {
+		type: 'animation',
+		words: allWords,
+		num_words: numWords,
+		sort_area_width: sortWidth,
+		sort_area_height: sortHeight,
+		stim_width: wordWidth,
+		stim_height: wordHeight,
+		imageWidth: imageWidth,
+		imageHeight: imageHeight,
+		background: backgroundImage,
+		first_slide_time: firstSlideTime,
+		time_per_word: timePerWord,
+		last_slide_time: lastSlideTime,
+		condition: 3,
+		prompt: "<p>Watch the locations of the words as they appear on your screen.</p>",
+		on_finish: function(data){data.stimulus = "setup3"}
+	};
+	
+	var setup4 = {
+		type: 'animation',
+		words: allWords,
+		num_words: numWords,
+		sort_area_width: sortWidth,
+		sort_area_height: sortHeight,
+		stim_width: wordWidth,
+		stim_height: wordHeight,
+		imageWidth: imageWidth,
+		imageHeight: imageHeight,
+		background: backgroundImage,
+		first_slide_time: firstSlideTime,
+		time_per_word: timePerWord,
+		last_slide_time: lastSlideTime,
+		condition: 4,
+		prompt: "<p>Watch the locations of the words as they appear on your screen.</p>",
+		on_finish: function(data){data.stimulus = "setup4"}
+	};
+	
+	var setup5 = {
+		type: 'animation',
+		words: allWords,
+		num_words: numWords,
+		sort_area_width: sortWidth,
+		sort_area_height: sortHeight,
+		stim_width: wordWidth,
+		stim_height: wordHeight,
+		imageWidth: imageWidth,
+		imageHeight: imageHeight,
+		background: backgroundImage,
+		first_slide_time: firstSlideTime,
+		time_per_word: timePerWord,
+		last_slide_time: lastSlideTime,
+		condition: 5,
+		prompt: "<p>Watch the locations of the words as they appear on your screen.</p>",
+		on_finish: function(data){data.stimulus = "setup5"}
+	};
+	
+	
+	////////////////////////////////////////////////////////////////////
+	////////////////////// SORTING AND FEEDBACK ////////////////////////
+	////////////////////////////////////////////////////////////////////
+	var sort_trial = {
+		type: 'free-sort',
+		words: allWords,
+		num_words: numWords,
+		sort_area_width: sortWidth,
+		sort_area_height: sortHeight,
+		stim_width: wordWidth,
+		stim_height: wordHeight,
+		background: backgroundImage,
+		imageWidth: imageWidth,
+		imageHeight: imageHeight,
+		disable_button: disableButton,
+		correctAnswers: function(){
+			var setupTrial = 7;
+			if(testOneTrial == true){setupTrial = 1};
+			if(distractorDebrief == false){setupTrial = 6};
+			var last_trial_setup = jsPsych.data.get().last(setupTrial).values()[0].animation_sequence;
+			return JSON.parse(last_trial_setup);
+		},
+		prompt: "<p>Click and drag the words back to their original locations.</p>",
+		on_finish: function(data){data.stimulus = "sort_trial"}
+	};
+	
+	var sort_feedback = {
+		type: 'html-keyboard-response',
+		stimulus: function(){
+			var totalCorrect = jsPsych.data.get().last(1).values()[0].sort_correct;
+			var trial = jsPsych.data.get().last(1).values()[0].trial_index;
+			if(trial < ((ptrials * (8 + zeroone)) + 2)){
+				trial = (trial - 1)/(8 + zeroone)
+			} else {
+				trial = (trial - 2)/(8 + zeroone)
+				if(breakTime !== 0 && trial > (trialsPerCondition * 5) + ptrials){
+					trial = jsPsych.data.get().last(1).values()[0].trial_index;
+					trial = (trial - 4)/(8 + zeroone);
+				};
+			};
+			jsPsych.setProgressBar(trial/totalTrials);
+			var positive = ["Great job!", "Keep going!", "You're doing great!", "Keep up the good work!", "Nice work!", "Excellent!", "Keep it up!"];
+			var negative = ["Better luck next time", "Keep trying!", "Keep going...", "Not quite", "You can do better", "Try again", "Room for improvement"];
+			var feedback = []; var fontColor = [];
+			if(totalCorrect > 4){
+				feedback = jsPsych.randomization.sampleWithReplacement(positive, 1);
+				if(totalCorrect == 9){feedback = "Perfect score!"};
+				fontColor = "green";
+			} else {
+				feedback = jsPsych.randomization.sampleWithReplacement(negative, 1);
+				if(totalCorrect == 4){feedback = "So close..."};
+				if(totalCorrect == 0){feedback = "None correct"};
+				fontColor = "red";
+			};
+			return "<p style='font-size:26px'><strong><font color ="+fontColor+">"+feedback+"</font></strong></p>"+
+			"<p style='font-size:26px'>You responded correctly to <strong>"+totalCorrect+"/"+numWords+"</strong> words on the last trial.</p><br>"+
+			"<p style='font-size:22px'><strong>Press any key to continue.</strong></p>"
+		},
+		on_finish: function(data){data.stimulus = "sort_feedback"}
+	};	
+	
+	
+	////////////////////////////////////////////////////////////////////
+	////////////////////////// FLANKER TASK ////////////////////////////
+	////////////////////////////////////////////////////////////////////
+	var flanker_instructions = {
+		type: 'html-keyboard-response',
+		stimulus: "<p>In this task, you will see five arrows on the screen, like the example below.</p>"+
+		"<img src='img/inc1.png'></img>"+
+		"<p>Press the left arrow key if the <strong>middle arrow</strong> is pointing left. (<)</p>"+
+		"<p>Press the right arrow key if the <strong>middle arrow</strong> is pointing right. (>)</p>"+
+		"<p>Press any key to begin.</p>",
+		post_trial_gap: 1000,
+		on_finish: function(data){data.stimulus = "flanker_instructions"}
+	};
+		
+	var flanker_stimuli = [
+	{stimulus: "img/con1.png", data: {stim_type: 'congruent', direction: 'left'}},
+	{stimulus: "img/con2.png", data: {stim_type: 'congruent', direction: 'right'}},
+	{stimulus: "img/inc1.png", data: {stim_type: 'incongruent', direction: 'right'}},
+	{stimulus: "img/inc2.png", data: {stim_type: 'incongruent', direction: 'left'}}
+	];
+	
+	var flanker_test = {
+		timeline: [{
+			type: 'image-keyboard-response',
+			choices: [37, 39],
+			trial_duration: flanker_time,
+            stimulus: jsPsych.timelineVariable('stimulus'),
+            data: jsPsych.timelineVariable('data'),
+            on_finish: function(data){
+              var correct = false;
+              if(data.direction == 'left' &&  data.key_press == 37 && data.rt > -1){
+                correct = true;
+              } else if(data.direction == 'right' && data.key_press == 39 && data.rt > -1){
+                correct = true;
+              }
+              data.correct = correct;
+              data.stimulus = "flanker_test";
+            },
+            post_trial_gap: function(){return Math.floor(Math.random() * flanker_time) + (flanker_time/3)}
+          }],
+          timeline_variables: flanker_stimuli,
+          sample: {type: 'fixed-repetitions', size: flanker_reps}
+	  };
+	
+    var flanker_debrief = {
+		type: 'html-keyboard-response',
+		stimulus: function(){
+			var total_trials = flanker_reps * 4;
+			var accuracy = 0;
+			var congruent_rt = 0;
+			var incongruent_rt = 0;
+			var congruent = [];
+			var incongruent = [];
+			for(var i = 0; i < (flanker_reps * 4); i++){
+				if(jsPsych.data.get().last(flanker_reps * 4).values()[i].correct == true){accuracy++};
+				if(jsPsych.data.get().last(flanker_reps * 4).values()[i].stim_type == "congruent"){
+					congruent.push(jsPsych.data.get().last(flanker_reps * 4).values()[i].rt);
+				} else {
+					incongruent.push(jsPsych.data.get().last(flanker_reps * 4).values()[i].rt);
+				};
+			};
+			for(var i = 0; i < (flanker_reps * 2); i++){
+				congruent_rt += congruent[i];
+				incongruent_rt += incongruent[i];
+			};
+			return "<p>You responded correctly on <strong>"+(Math.round(accuracy / total_trials * 100))+"%</strong> of the trials.</p> " +
+            "<p>Your average response time for congruent trials was <strong>" + Math.round(congruent_rt/(flanker_reps * 2)) + "ms</strong>.</p>"+
+            "<p>Your average response time for incongruent trials was <strong>" + Math.round(incongruent_rt/(flanker_reps * 2)) + "ms</strong>.</p>"+
+            "<p><strong>Press any key to begin the sorting task.</strong></p>";
+		},
+		on_finish: function(data){data.stimulus = "flanker_debrief"}
+	};
+	
+	
+	////////////////////////////////////////////////////////////////////
+	//////////////////////// END-OF-STUDY PAGES ////////////////////////
+	////////////////////////////////////////////////////////////////////
+	var demographics = {
+		timeline: [{
+			type: 'html-button-response',
+			stimulus: "<p><strong>You've now completed all trials!</strong></p><p>On the remaining pages we'll ask you a few brief demographic questions.</p><br>",
+			choices: ['Continue'],
+			on_finish: function(data){data.stimulus = "demographics"}
+		}, {
+			type: 'survey-text',
+			questions: [{prompt: "<p>First, please enter your <strong>Mechanical Turk Worker ID</strong> to ensure that you are fully compensated for your time today.</p>"}],
+			on_finish: function(data){data.stimulus = "workerID"}
+		}, {
+			type: 'survey-multi-choice',
+			questions: [{prompt: "<p>Now, what was the word we asked you to remember at the beginning of the study?</p>", options: attn_words, required: requireDemos}],
+			on_finish: function(data){data.stimulus = "attn_check"}
+		}, {
+			type: 'survey-text',
+			questions: [{prompt: "<p>What is your age? Please type a number in the box below</p>"}],
+			on_finish: function(data){data.stimulus = "age"}
+		}, {
+			type: 'survey-multi-choice',
+			questions: [{
+				prompt: "<p>Please indicate your gender</p>",
+				options: ['Male', 'Female', 'Other'],
+				required: requireDemos,
+				horizontal: false
+			}],
+			on_finish: function(data){data.stimulus = "gender"}
+		}, {
+			type: 'survey-multi-choice',
+			questions: [{prompt: "<p>Please identify your ethinic group</p>", options: ['Hispanic or Latino', 'Not Hispanic or Latino'], horizontal: false}],
+			on_finish: function(data){data.stimulus = "ethnic"}
+		}, {
+			type: 'survey-multi-select',
+			questions: [{
+				prompt: "<p>Please identify your race (check all that apply)</p>", 
+				options: ['American Indian or Alaska Native', 'Asian', 'Black or African American', 'Native Hawaiian or other Pacific Islander', 'White', 'Other'],
+				horizontal: false
+			}],
+			on_finish: function(data){data.stimulus = "race"}
+		}, {
+			type: 'survey-multi-choice',
+			questions: [{prompt: "<p>Is English your primary language?</p>", options: ['Yes', 'No'], horizontal: true, required: requireDemos}],
+			on_finish: function(data){data.stimulus = "english"}
+		}, {
+			type: 'survey-multi-choice',
+			questions: [{prompt: "<p>Did you have any trouble understanding any of the language or instructions in this study?</p>", options: ['Yes', 'No'], horizontal: true, required: requireDemos}],
+			on_finish: function(data){data.stimulus = "understand"}
+		}, {
+			type: 'survey-text',
+			questions: [{prompt: "<p>Please describe any strategies you found yourself using during the task.</p><p>Did you generally aim to remember the whole scene, or just a few words?<br>Did you think of the words in different rooms as belonging together, or did you look at them separately?</p>", rows: 10, columns: 50}],
+			on_finish: function(data){data.stimulus = "strategies"}
+		}, {
+			type: 'survey-text',
+			questions: [{prompt: "<p>Finally, please let us know any comments or thoughts you had while completing the study.</p>", rows: 10, columns: 50}],
+			on_finish: function(data){data.stimulus = "comments"}
+		}] 
+	};
+
+	var study_end = {
+		type: 'html-button-response',
+		choices: ['Submit'],
+		stimulus: "<p><strong>Thank you for your participation!</strong></p>"+
+		"<p>Click the button below to submit your responses and receive your MTurk confirmation code.</p><br>",
+		on_finish: function(data){data.stimulus = "study_end"}
+	};
+	
+	
+	////////////////////////////////////////////////////////////////////
+	//////////////////// CREATE RANDOMIZED TRIALS //////////////////////
+	////////////////////////////////////////////////////////////////////
+	var allConditions = [1, 2, 3, 4, 5];
+	if(randomizationOption == 1 || randomizationOption == 2){
+		var shuffledTrials = jsPsych.randomization.repeat(allConditions, trialsPerCondition);
+		if(randomizationOption == 2){shuffledTrials = jsPsych.randomization.shuffleNoRepeats(shuffledTrials)};
+	} else {
+		function repeat(func, times){func(); times && --times && repeat(func, times)};
+		var shuffledTrials = [];
+		repeat(function() {shuffledTrials.push(allConditions)}, trialsPerCondition);
+		for(var i = 0; i < shuffledTrials.length; i++){
+			shuffledTrials[i] = jsPsych.randomization.repeat(shuffledTrials[i], 1);
+			if(i > 0 && shuffledTrials[i][0] == shuffledTrials[i - 1][4] && randomizationOption == 4){
+				do {shuffledTrials[i] = jsPsych.randomization.repeat(shuffledTrials[i], 1);}
+				while (shuffledTrials[i][0] == shuffledTrials[i - 1][4]);
+			};
+		};
+		shuffledTrials = [].concat.apply([], shuffledTrials);
+	};
+	
+	if(breakTime !== 0 && postTrialsPerCondition !== 0){
+		var postShuffle = [];
+		repeat(function() {postShuffle.push(allConditions)}, postTrialsPerCondition);
+		for(var i = 0; i < postShuffle.length; i++){
+			postShuffle[i] = jsPsych.randomization.repeat(postShuffle[i], 1);
+			if(i > 0 && postShuffle[i][0] == postShuffle[i - 1][4] && randomizationOption == 4){
+				do {postShuffle[i] = jsPsych.randomization.repeat(postShuffle[i], 1);}
+				while (postShuffle[i][0] == postShuffle[i - 1][4]);
+			};
+		};
+		postShuffle = [].concat.apply([], postShuffle);
+	};
+	
+	
+	////////////////////////////////////////////////////////////////////
+	//////////////////////// CREATE TIMELINE ///////////////////////////
+	////////////////////////////////////////////////////////////////////
+	if(session == 1){
+		var practiceTrials = {timeline: []};
+		if(betweenSubjectsCondition !== 0){practiceConditions = Array(ptrials).fill(betweenSubjectsCondition)}
+		for(var i = 0; i < practiceConditions.length; i++){
+			practiceTrials.timeline.push(eval('setup' + practiceConditions[i]));
+			practiceTrials.timeline.push(flanker_instructions);
+			practiceTrials.timeline.push(flanker_test);
+			if(distractorDebrief == true){practiceTrials.timeline.push(flanker_debrief)};
+			practiceTrials.timeline.push(sort_trial);
+			practiceTrials.timeline.push(sort_feedback);
+		};
+	}
+	
+	var finalTrials = {timeline: [finalInstructions]};
+	if(betweenSubjectsCondition !== 0){shuffledTrials = Array(trialsPerCondition * 5).fill(betweenSubjectsCondition)}
+	for(var i = 0; i < shuffledTrials.length; i++){
+		finalTrials.timeline.push(eval('setup' + shuffledTrials[i]));
+		finalTrials.timeline.push(flanker_instructions);
+		finalTrials.timeline.push(flanker_test);
+		if(distractorDebrief == true){finalTrials.timeline.push(flanker_debrief)};
+		finalTrials.timeline.push(sort_trial);
+		finalTrials.timeline.push(sort_feedback);
+	};
+	
+	if(breakTime !== 0 && postTrialsPerCondition !== 0){
+		var postTrials = {timeline: []};
+		if(betweenSubjectsCondition !== 0){postShuffle = Array(postTrialsPerCondition * 5).fill(betweenSubjectsCondition)}
+		for(var i = 0; i < postShuffle.length; i++){
+			postTrials.timeline.push(eval('setup' + postShuffle[i]));
+			postTrials.timeline.push(flanker_instructions);
+			postTrials.timeline.push(flanker_test);
+			if(distractorDebrief == true){postTrials.timeline.push(flanker_debrief)};
+			postTrials.timeline.push(sort_trial);
+			postTrials.timeline.push(sort_feedback);
+		};
+	};
+	
+	function repeat(func, times){func(); times && --times && repeat(func, times)};
+	var testTrial = {timeline: []};
+	repeat(function() {
+		testTrial.timeline.push(eval('setup' + conditionOneTrial));
+		testTrial.timeline.push(sort_trial);
+		testTrial.timeline.push(sort_feedback);
+	}, repeatOneTrial);
+	
+	///////////////////////
+	var timeline = [];
+	timeline.push(welcome);
+	timeline.push(consent);
+	timeline.push(instructions);
+	if(testOneTrial == true){
+		timeline.push(testTrial);
+	} else {
+		if(session == 1){timeline.push(practiceTrials);};
+		timeline.push(finalTrials);
+		if(breakTime !== 0 && postTrialsPerCondition !== 0){
+			timeline.push(breakInstructions);
+			timeline.push(postTrials);
+		};
+	};
+	timeline.push(demographics);
+	timeline.push(study_end);
+	
+	
+	////////////////////////////////////////////////////////////////////
+	////////////////////////// END OF STUDY ////////////////////////////
+	////////////////////////////////////////////////////////////////////
+	jsPsych.init({
+		timeline: timeline,
+		show_progress_bar: true,
+		auto_update_progress_bar: false,
+		preload_images: backgroundImage.concat(flankerImages),
+		show_preload_progress_bar: true,
+		on_finish: function(){
+			if(consentResponse[0] == true){
+				$.ajax({
+					type: "POST",
+					url: "/experiment-data",
+					data: jsPsych.data.get().json(),
+					contentType: "application/json"
+				})
+				.done(function(){
+					window.location.href = "finish";
+				})
+				.fail(function(){
+					alert("A problem occurred while writing to the database. Please contact the researcher for more information.");
+					window.location.href = "/";
+				})
+		    };
+		}
+	});
+	</script>
+</html>

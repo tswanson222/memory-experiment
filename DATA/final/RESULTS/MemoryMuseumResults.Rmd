@@ -1,0 +1,684 @@
+---
+title: "Memory Museum Results"
+#author: "Trevor James Swanson"
+date: "March 10, 2021"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+source('../functions.R')
+```
+
+## Overview
+
+The study was split up into three sessions, which took place on three consecutive days. During each session, a participant completed 30 trials of the study; in the first session, however, participants also completed 2 practice trials of the Control (Chaos) condition. 
+
+63 people participated in the first session; 59 of those people also completed the second session, and 56 completed the third session. We only analyze data from those who completed all three sessions, and so our final sample is $N = 56$.
+
+Across sessions, there were 90 total trials of 5 conditions (18 trials per condition):
+
++ **Control**: Each consecutive word came from a different semantic category, and appeared in a different room.
++ **TimeSem**: Words from each semantic category were shown one after another, although appeared in different rooms.
++ **SpaceSem**: All words in a room were from the same semantic category, but each consecutive word would be from a different category and appear in a different room.
++ **SpaceTime**: All words in a room were from different semantic categories, but the ordering would fill up each room consecutively.
++ **SpaceSemTime**: All words in a room were from the same semantic category, and the rooms would fill up one by one.
+
+## Performance Distributions
+
+In terms of average performance across trials, 6 individuals had higher than 90% accuracy, and 2 of those individuals scored higher than 99%. For all analyses beyond this point, these two individuals have been removed from the data.
+
+```{r plots}
+x <- readRDS('../simpleFINAL.RDS')
+
+par(mfrow = c(2, 2))
+sess <- lapply(1:3, function(z) subset(x, session == z))
+for(i in 1:3){hist(sess[[i]]$item_correct, main = '', xlab = paste('Session', i))}
+idcorr <- sapply(lapply(split(x, x$ID), '[[', 'item_correct'), mean)
+plot(sort(idcorr), type = 'b', ylab = 'Average Overall Performance', xlab = '')
+
+x <- subset(x, !ID %in% which(idcorr > .99))
+x$ID <- factor(x$ID)
+```
+
+## Analyzing Predictors of Performance
+
+Mixed-effects models were fit in a stepwise fashion to determine which predictors improve an understanding of performance. For all models, two random intercepts are included: (1) A random intercept for participant ID, and (2) a random intercept for session.
+
+```{r lme}
+m0 <- lmer(item_correct ~ condition + (1|ID) + (1|session),
+           data = x, REML = FALSE)
+m1 <- lmer(item_correct ~ trial + (1|ID) + (1|session),
+           data = x, REML = FALSE)
+m2 <- lmer(item_correct ~ condition + trial + (1|ID) + (1|session),
+           data = x, REML = FALSE)
+m3 <- lmer(item_correct ~ condition * trial + (1|ID) + (1|session), 
+           data = x, REML = FALSE)
+```
+
+First, we see that condition is a significant predictor of performance.
+
+```{r anova1}
+anova(m0, m2)
+```
+
+We also see that trial is a significant predictor of performance, indicating the presence of a learning effect across the duration of the study.
+
+```{r anova2}
+anova(m1, m2)
+```
+
+We see, however, that there is no significant interaction between condition and trial. This means that we don't see a differential learning effect that varies across trial type.
+
+```{r anova3}
+anova(m2, m3)
+```
+
+### Incorporating reaction time
+
+First, we see that reaction time does not correlate strongly with any of the performance metrics. Also, it does not significantly correlate with overall average performance.
+
+```{r rt}
+x$rt <- scale(x$rt)
+cor(x[, grep('^rt$|_correct$', colnames(x))])
+rts <- sapply(splam(x), function(z) mean(z$rt))
+cor.test(idcorr[-which(idcorr > .99)], rts)
+```
+
+However, when added to the primary model predicting performance, reaction time does add informational value.
+
+```{r anova4}
+m4 <- lmer(item_correct ~ condition + trial + rt + (1|ID) + (1|session),
+           data = x, REML = FALSE)
+anova(m2, m4)
+```
+
+This shows the standardized fixed effect estimates for each predictor along with their 95% confidence intervals. 
+
+```{r plotting, eval = TRUE}
+#p <- profile(m4)
+
+#out <- confint(p)[-(1:4), ]
+#rownames(out) <- gsub('condition', '', rownames(out))
+#out <- data.frame(out[, 1, drop = FALSE], fixef(m4)[-1], out[, 2, drop = FALSE], check.names = FALSE)
+#colnames(out)[2] <- 'fixef'
+
+plmer(m4, ylim = c(-.1, .5), title = 'Standardized Fixed Effect Estimates')
+
+#dotplot(fixef(m4)[-1], strip = FALSE)
+#confint(p)[-(1:4), ]
+```
+
+Here we see the different slopes by condition for performance across trials.
+
+```{r trials}
+plot(Effect(c('trial', 'condition'), m4))
+```
+
+Lastly, we can see below the post-hoc effect estimates for the final model. Specifically, this shows which conditions differ significantly (or not) from one another.
+
+```{r post}
+lsmeans(m4, pairwise ~ condition, adjust = 'tukey')
+```
+
+### Recency effect
+
+First, we look at a model where we predict performance from condition and the original temporal order. When only these predictors are used, the original temporal order has a significant negative effect on performance within each trial (on average). This means that participants are more likely to get items correct that appeared first, and are less likely to get items correct that appeared last (within a given trial). However, once we include the response order (i.e., the order that the participant put items back), this wipes out the effect of original temporal order. Thus, the response order accounts for the relationship between original temporal order and performance. Items that participants put back at the beginning of the trial are more likely to be correct than those put back at the end of the trial. There is also a significant interaction with condition, such that the extent to which we observe this recency effect is dependent on the condition of the trial. **NOTE: This hasn't excluded the two high-performing participants.**
+
+```{r recency2}
+recency <- readRDS('recency.RDS')
+list2env(recency, .GlobalEnv)
+anova(r3, r2, r1)
+plmer(r3, c(.1, 2))
+```
+
+## Clustering by Strategy
+
+Four variables were used to perform k-means clustering. The analysis of average silhouettes indicated that 3 clusters is the optimal number. Below that plot we see a plot that shows how distinct the 3 clusters are from each other, and then finally we see the characteristics of each cluster based on the four dimensions.
+
+```{r reclust, eval = TRUE}
+# Add time variables and reformat data
+x <- readRDS('../simpleFINAL.RDS')
+x <- subset(x, !ID %in% which(idcorr > .99))
+x$ID <- factor(x$ID)
+
+x$rt <- scale(x$rt)
+x$time_forward_norm <- normal(ifelse(x$time_pattern < 0, 0, x$time_pattern))
+x$time_backward_norm <- normal(abs(ifelse(x$time_pattern > 0, 0, x$time_pattern)))
+
+out <- x[, grep('norm', colnames(x))]
+x <- x[, setdiff(colnames(x), c(colnames(out), gsub('_norm', '', colnames(out))))]
+x <- data.frame(x, out)
+colnames(x) <- gsub('_norm', '', colnames(x))
+x <- x[, -grep('^k', colnames(x))]
+
+dat1 <- x[, grep('pattern', colnames(x))]
+dat2 <- x[, c(grep('pattern', colnames(x))[1:2], grep('ward', colnames(x)))]
+
+# Determine optimal number of clusters
+#fviz_nbclust(dat2, kmeans, method = 'wss')
+fviz_nbclust(dat2, kmeans, method = 'silhouette') # 3
+#set.seed(1)
+#gap_stat <- clusGap(dat2, FUN = kmeans, nstart = 25, K.max = 10, B = 500)
+#gap_stat <- readRDS('../gap_stat3.RDS')
+#fviz_gap_stat(gap_stat)
+
+# Cluster!
+#set.seed(1)
+#k3.1 <- kmeans(dat1, centers = 3, nstart = 25)
+#fviz_cluster(k3.1, data = dat1)
+
+set.seed(1)
+k3.2 <- kmeans(dat2, centers = 3, nstart = 25)
+fviz_cluster(k3.2, data = dat2)
+
+#x$k1 <- k3.1$cluster
+```
+
+```{r reclust2, fig.width = 10}
+x$k <- factor(k3.2$cluster)
+levels(x$k) <- switch(2 - isTRUE(nrow(x) == 5040), c(2, 1, 3), c(3, 2, 1))
+x$k <- as.numeric(as.character(x$k))
+kplot(x, 'k')
+```
+
+### Baseline strategy during practice
+
+I pulled in the practice trial data, wherein participants completed two trials of the Control condition upon beginning the study. I made a few different comparisons to see whether the strategies used during practice differed from the strategies used in the rest of the study.
+
+First, we see that Cluster 1 is the most common strategy used during practice, and that Cluster 3 is the second most common, with only 6 responses fitting with Cluster 2. 
+
+```{r practice0}
+y <- clust(readRDS('../practice/simpleFINAL.RDS'), rm = TRUE)
+setNames(data.frame(table(rmp(y, TRUE)$k)), c('Cluster', 'Freq'))
+```
+
+Then, I compared the strategies used in practice against those used in all other trials to assess whether the relative proportions are different. We see that the distribution of strategies is significantly different during practice from the remainder of trials.
+
+```{r practice1}
+y$session2 <- ifelse(y$trial %in% 1:2, 0, 1)
+tab <- table(y$k, y$session2)
+chisq.test(tab)
+```
+
+Next, we see that after removing the practice trials, the distribution of strategies does not differ significantly across the three sessions.
+
+```{r practice2}
+tab2 <- table(rmp(y)$k, rmp(y)$session)
+chisq.test(tab2)
+```
+
+Then, I only focused on the Control condition trials, and again compared the strategies used in practice against those used in all other Control trials. We see again that the strategies used in practice differ from those used in other instances of the Control condition, and that the strategies used in the Control condition do not differ across sessions.
+
+```{r practice3}
+yy <- subset(y, condition == 'Control')
+tab3 <- table(yy$k, yy$session2)
+chisq.test(tab3)
+
+tab4 <- table(rmp(yy)$k, rmp(yy)$session)
+chisq.test(tab4)
+```
+
+Lastly, I checked to see whether strategies differ across conditions. We do indeed see that strategies differ significantly across conditions, and that the strategies used in the Control condition differ from those used in other conditions after aggregating them.
+
+```{r practice4}
+tab5 <- table(x$k, x$condition)
+chisq.test(tab5)
+
+x$condition2 <- ifelse(x$condition == 'Control', 'control', 'other')
+tab6 <- table(x$k, x$condition2)
+chisq.test(tab6)
+```
+
+### When does baseline strategy change?
+
+In the foregoing analysis, we see that the distribution of strategy use is different during the two practice trials in comparison with the remainder of trials. So at what point do participants 'lock-in' to a consistent pattern of strategy use? To test this, I started by comparing the contingency table for strategies used in practice against the remainder of trials; then, I looked at the practice trials + the first trial, then the practice trials + the first two trials, etc., until there was no longer a significant difference between the set of initial trials and the remainder of trials.
+
+We see that once we compare the first 23 trials (i.e., Trial 21 + 2 practice trials) against the remainder of trials, there is no longer a significant difference in the distribution of strategies. So, **Trial 22 (i.e., Trial 20 + 2 practice trials)** is the last trial wherein we see a different pattern of strategy use than in the rest of the study. This means that it is exactly 2/3 of the way into Session 1 that we see participants start to lock into a consistent pattern of responding.
+
+```{r strat}
+y <- clust(readRDS('../practice/simpleFINAL.RDS'), rm = TRUE)
+
+for(i in 2:90){
+  y$session2 <- ifelse(y$trial %in% 1:i, 0, 1)
+  tab <- table(y$k, y$session2)
+  out <- chisq.test(tab)
+  if(out$p.value > .05){
+    message(paste0('FINAL VALUE: ', i))
+    break
+  }
+}
+```
+
+### Strategy adherence within conditions over time
+
+Here I took a course-grained approach to assess whether we see differences in strategy use within conditions across sessions. The idea is this: if participants are learning which strategy is best for a given condition, then we would expect to see the distribution of strategy use within that condition change across sessions. So, for each condition I compared the contingency table for strategy use across sessions. A non-significant difference means that the overall distribution of strategy use does not change significantly across sessions. We see marginal change in two of the conditions: **TimeSem** $(p = .055)$, and **SpaceSemTime** $(p = .11)$.
+
+```{r adhere}
+x <- clust(readRDS('../simpleFINAL.RDS'), rm = TRUE)
+xx <- lapply(split(x, x$condition), function(z) table(z$k, z$session))
+yy <- lapply(xx, chisq.test)
+out <- data.frame(pvalue = sapply(yy, '[[', 3))
+out
+```
+
+
+### Assessing the effect of strategy on performance
+
+First, we see that including cluster/strategy as a predictor of performance significantly improves the fit of our primary model. 
+
+```{r clustpred}
+x$k <- factor(x$k)
+levels(x$k) <- paste0('Clust', 1:3)
+m5 <- lmer(item_correct ~ trial + rt + condition + k + (1|ID) + (1|session), data = x, REML = FALSE)
+
+anova(m4, m5)
+```
+
+Moreover, we see that there is a significant interaction between strategy and condition.
+
+```{r clustpred2}
+m6 <- lmer(item_correct ~ trial + rt + condition * k + (1|ID) + (1|session), data = x, REML = FALSE)
+
+anova(m5, m6)
+
+plmer(m6, c(-1.5, 1))
+```
+
+## Analyzing Errors
+
+Here we look at the predictors of whether participants made correct responses relative to the three dimensions. The outcomes we look at here are essentially more lenient measures of performance, as they focus on performance in a specific dimension rather than whether an item was actually placed in the exact correct location. 
+
+### Temporal performance
+
+```{r other1}
+time <- suppressMessages(
+  lmer(time_correct ~ condition + trial + rt + k + (1|ID) + (1|session), 
+       data = x, REML = FALSE)
+)
+plot(Effect(c('trial', 'condition'), time))
+plmer(time, c(-.1, .1))
+lsmeans(time, pairwise ~ condition, adjust = 'tukey')
+```
+
+### Spatial performance
+
+```{r other2}
+room <- suppressMessages(
+  lmer(room_correct ~ condition + trial + rt + k + (1|ID) + (1|session),
+             data = x, REML = FALSE)
+)
+plot(Effect(c('trial', 'condition'), room))
+plmer(room, c(-.4, .8))
+lsmeans(room, pairwise ~ condition, adjust = 'tukey')
+```
+
+### Category performance
+
+```{r other3}
+catcor <- suppressMessages(
+  lmer(cat_correct ~ condition + trial + rt + k + (1|ID) + (1|session),
+               data = x, REML = FALSE)
+)
+plot(Effect(c('trial', 'condition'), catcor))
+plmer(catcor, c(-.25, 1))
+lsmeans(catcor, pairwise ~ condition, adjust = 'tukey')
+```
+
+## Analyzing Errors - Part 2
+
+The following are included as predictors of each type of error:
+
++ **Condition**
++ **Trial**
++ **Reaction time**
++ **Strategy (k)**
+
+Also, two models are fit: One with an interaction between **Condition** and **Trial** (to see whether the frequency of errors changes differently in different conditions over time), and another without. The best-fitting model between those two is then selected for each type of error.
+
+```{r loaderrors}
+dat <- readRDS('../fullData3.RDS')
+dat <- subset(dat, !ID %in% which(idcorr > .99))
+dat$ID <- factor(dat$ID)
+
+dat$room_error <- as.numeric(dat$item_correct1 == 0 & dat$room_correct1 == 1)
+dat$cat_error <- as.numeric(dat$item_correct1 == 0 & dat$cat_correct1 == 1)
+dat <- splam(dat)
+
+x$room_error <- unname(unlist(lapply(dat, function(z) sapply(z, function(k) mean(k$room_error)))))
+x$cat_error <- unname(unlist(lapply(dat, function(z) sapply(z, function(k) mean(k$cat_error)))))
+```
+
+### Spatial errors
+
+For spatial errors, we see a significant interaction between **Condition** and **Trial**.
+
+```{r sperrors}
+room1 <- suppressMessages(
+  lmer(room_error ~ condition + trial + rt + k + (1|ID) + (1|session),
+             data = x, REML = FALSE)
+)
+room2 <- suppressMessages(
+  lmer(room_error ~ condition * trial + rt + k + (1|ID) + (1|session),
+             data = x, REML = FALSE)
+)
+
+anova(room1, room2)
+plot(Effect(c('trial', 'condition'), room2))
+plmer(room2, c(-.4, .3))
+lsmeans(room2, pairwise ~ condition, adjust = 'tukey')
+```
+
+### Category errors
+
+For category/semantic errors we also see a significant interaction between **Condition** and **Trial**.
+
+```{r caerrors}
+catcor1 <- suppressMessages(
+  lmer(cat_error ~ condition + trial + rt + k + (1|ID) + (1|session),
+               data = x, REML = FALSE)
+)
+catcor2 <- suppressMessages(
+  lmer(cat_error ~ condition * trial + rt + k + (1|ID) + (1|session),
+               data = x, REML = FALSE)
+)
+
+anova(catcor1, catcor2)
+plot(Effect(c('trial', 'condition'), catcor2))
+plmer(catcor2, c(-.5, .8))
+lsmeans(catcor2, pairwise ~ condition, adjust = 'tukey')
+```
+
+## Reaction Time Differences by Strategy
+
+Here we predict reaction time for a given trial using cluster/strategy, condition, performance, and trial. First, we see that all variables negatively predict reaction time. Specifically (in order of importance):
+
++ Reaction time gets quicker across trials (i.e., participants are slower at the beginning of the study).
++ In comparison with strategy 1, when participants use strategy 2 or 3 they exhibit shorter reaction time.
++ Participants are faster on trials where they get more items correct.
++ In comparison with the **Control** condition, participants are faster when they are in either the **SpaceSemTime** condition or the **SpaceTime** condition.
++ In comparison with the **Control** condition, there is no statistical difference in reaction time for both the **TimeSem** and **SpaceTime** conditions.
+
+Results show that there is no interaction between strategy and condition. 
+
+```{r predrt}
+x <- clust(readRDS('../simpleFINAL.RDS'), rm = TRUE)
+x$k <- factor(x$k)
+m1 <- lmer(rt ~ k + (1|ID) + (1|session), data = x, REML = FALSE)
+m2 <- lmer(rt ~ k + condition + (1|ID) + (1|session), data = x, REML = FALSE)
+m3 <- lmer(rt ~ k + condition + item_correct + (1|ID) + (1|session), data = x, REML = FALSE)
+m4 <- lmer(rt ~ k + condition + item_correct + trial + (1|ID) + (1|session), data = x, REML = FALSE)
+m5 <- lmer(rt ~ k * condition + item_correct + trial + (1|ID) + (1|session), data = x, REML = FALSE)
+anova(m5, m4, m3, m2, m1)
+plmer(m4, c(-.3, .4))
+```
+
+## Plotting Dimensions over Time
+
+Here we're interested in how values of each dimension change across trials within each condition. This allows us to gain a clearer picture of which dimensions are utilized within each condition, as well as whether that usage changes with time. I have a function that allows us to plot these trajectories for any given participant, however these plots are very difficult to interpret. So, I aggregated values of the dimensions across participants in order to see overarching patterns. 
+
+Each trial is shown to a participant 18 times over the duration of the study. The order in which the conditions appear is random across participants, so to aggregate these values I simply split the dataset by condition and took the average of each dimension across participants based on when they were exposed to a condition. For instance, in the **Control** condition the first data point represents the average value of each participant's first exposure to the **Control** condition; the second data point represents the average of each participant's second exposure to the **Control**, etc.  
+
+We can see that the *room_pattern* dimension is relatively high in all conditions, and both time dimensions are relatively low. Adherence to the *cat_pattern* dimension is relatively high in both the **SpaceSem** and **SpaceSemTime** conditions, and is lowest in the **SpaceTime** condition. In summary, we see that the following conditions exhibit similar patterns:
+
++ **SpaceSem** and **SpaceSemTime** look similar.
++ **Control** and **TimeSem** look similar.
++ **SpaceTime** looks somewhat like the previous two conditions, although exhibits a lower range on the *cat_pattern* dimension.
+
+```{r dimtime}
+x <- clust(readRDS('../simpleFINAL.RDS'), rm = TRUE)
+xx <- lapply(split(x, x$ID), function(z) split(z, z$condition))
+xx <- setNames(lapply(names(xx$`1`), function(z) lapply(xx, '[[', z)), names(xx$`1`))
+xx <- lapply(xx, function(z) lapply(c(10, 11, 13, 14), function(k) lapply(z, '[[', k)))
+for(i in 1:5){names(xx[[i]]) <- colnames(x)[c(10, 11, 13, 14)]}
+xx <- lapply(xx, function(z) lapply(z, function(k) do.call(cbind, k)))
+xx <- lapply(lapply(xx, function(z) lapply(z, rowMeans)), function(r) data.frame(do.call(cbind, r)))
+xx <- data.frame(do.call(rbind, setNames(lapply(names(xx), function(z){
+  xx[[z]]$condition <- z
+  xx[[z]]$trial <- 1:18
+  return(xx[[z]])
+}), names(xx))))
+rownames(xx) <- 1:90
+xx$condition <- factor(xx$condition, levels = levels(x$condition))
+xx <- data.frame(stack(xx[, 1:4]), condition = rep(xx$condition, 4),
+                 trial = rep(xx$trial, 4))
+colnames(xx)[2] <- 'dimension'
+
+ggplot(xx, aes(x = trial, y = values, col = dimension)) +
+  geom_line() + facet_wrap(. ~ condition) + theme_bw()
+```
+
+## Modeling Dimensions over Time
+
+Here we predict the value of each dimension based on the trial and condition, as well as their interaction. 
+
+### Room pattern
+
++ Significant interaction between trial and condition, but none of the individual interactions are significant. Meaning that room pattern doesn't really change in different ways across conditions over time.
++ No significant effect of trial; adherence to room pattern is statistically stable across trials.
++ Significantly more adherence to room pattern in both the **SpaceSem** and **SpaceSemTime** conditions, in comparison with **Control**.
+
+```{r roomdim}
+x <- clust(readRDS('../simpleFINAL.RDS'), rm = TRUE)
+room1 <- suppressMessages(
+  lmer(room_pattern ~ trial + (1|ID) + (1|session), 
+       data = x, REML = FALSE)
+)
+
+room2 <- suppressMessages(
+  lmer(room_pattern ~ trial + condition + (1|ID) + (1|session),
+       data = x, REML = FALSE)
+)
+
+room3 <- suppressMessages(
+  lmer(room_pattern ~ trial * condition + (1|ID) + (1|session),
+       data = x, REML = FALSE)
+)
+
+anova(room3, room2, room1)
+plmer(room3, c(-.2, .5))
+```
+
+### Category pattern
+
++ No significant interaction between trial and condition.
++ No significant effect of trial, meaning that adherence to category pattern is statistically stable across trials.
++ Significantly more adherence to *cat_pattern* in both the **SpaceSem** and **SpaceSemTime** conditions, in comparison with **Control**.
+
+```{r catdim}
+cat1 <- suppressMessages(
+  lmer(cat_pattern ~ trial + (1|ID) + (1|session),
+       data = x, REML = FALSE)
+)
+
+cat2 <- suppressMessages(
+  lmer(cat_pattern ~ trial + condition + (1|ID) + (1|session),
+       data = x, REML = FALSE)
+)
+
+cat3 <- suppressMessages(
+  lmer(cat_pattern ~ trial * condition + (1|ID) + (1|session),
+       data = x, REML = FALSE)
+)
+
+anova(cat3, cat2, cat1)
+plmer(cat2, c(-.1, 2))
+```
+
+### Time forward pattern
+
++ No significant interaction between trial and condition.
++ Significant negative effect of trial, meaning that adherence to the original temporal order decreases significantly over time; i.e., people rely less on temporal order over the duration of the study.
++ Significantly more adherence to original temporal order in the **SpaceTime**, **SpaceSemTime**, and **TimeSem** conditions, in comparison with the **Control**.
++ No significant difference between **Control** and **SpaceSem** conditions.
+
+```{r fordim}
+forward1 <- suppressMessages(
+  lmer(time_forward ~ trial + (1|ID) + (1|session),
+       data = x, REML = FALSE)
+)
+
+forward2 <- suppressMessages(
+  lmer(time_forward ~ trial + condition + (1|ID) + (1|session),
+       data = x, REML = FALSE)
+)
+
+forward3 <- suppressMessages(
+  lmer(time_forward ~ trial * condition + (1|ID) + (1|session),
+       data = x, REML = FALSE)
+)
+
+anova(forward3, forward2, forward1)
+plmer(forward2, c(-.1, .9))
+```
+
+### Time backward pattern
+
++ No significant interaction between trial and condition.
++ Significant positive effect of trial, meaning that participants are more likely to adhere to the *reverse* of the original temporal order over time.
++ Participants are significantly more likely to adhere to the *reverse* temporal order in both the **SpaceSem** and **SpaceSemTime** conditions, in comparison with the **Control**.
+
+```{r backdim}
+backward1 <- suppressMessages(
+  lmer(time_backward ~ trial + (1|ID) + (1|session),
+       data = x, REML = FALSE)
+)
+
+backward2 <- suppressMessages(
+  lmer(time_backward ~ trial + condition + (1|ID) + (1|session),
+       data = x, REML = FALSE)
+)
+
+backward3 <- suppressMessages(
+  lmer(time_backward ~ trial * condition + (1|ID) + (1|session),
+       data = x, REML = FALSE)
+)
+
+anova(backward3, backward2, backward1)
+plmer(backward2, c(-.1, .75))
+```
+
+## Autoregressive Models
+
+
+### Performance
+```{r autoarima}
+x <- clust(readRDS('../simpleFINAL.RDS'), rm = TRUE, add_err = '../fullData3.RDS')
+
+correct <- grep('correct$', colnames(x))
+correct <- setNames(lapply(correct, function(z) forecast::auto.arima(x[, z])), colnames(x)[correct])
+correct
+```
+
+### Dimensions
+```{r ar1}
+pattern <- grep('pattern$|forward$|backward$', colnames(x))
+pattern <- setNames(lapply(pattern, function(z) forecast::auto.arima(x[, z])), colnames(x)[pattern])
+pattern
+```
+
+### Errors
+```{r ar2}
+error <- grep('error$', colnames(x))
+error <- setNames(lapply(error, function(z) forecast::auto.arima(x[, z])), colnames(x)[error])
+error
+```
+
+## Pseudo-AR Models
+
+**Scenario 1:** within each condition, a model is fit predicting each trial of that condition from the immediately preceding trial (which is guaranteed to be of a separate condition). We predict the proportion of items correct for each trial of a given condition based upon: (1) the proportion of items correct in the immediately preceding trial, (2) the condition of the immediately preceding trial, and (3) the number of instances that the participant has been exposed to the outcome condition. 
+
+In general, the same results obtain in all 5 conditions:
+
++ The proportion of items correct on the immediately preceding trial positively predicts that on the current trial.
++ This is unrelated to the condition of that immediately preceding trial.
++ We observe a positive learning effect over time.
+
+**Scenario 2:** Similar, except that for each condition we predict the proportion of items correct from: (1) the proportion of items correct on the last iteration of that condition, and (2) the number of instances that the participant has been exposed to the outcome condition.
+
+Across all conditions, the following results were obtained:
+
++ The proportion of items correct at one iteration of a condition does not predict performance on the subsequent iteration (however, we do see a significant, but small, positive effect in the **SpaceSemTime** condition).
++ We observe a positive learning effect over time.
+
+Lastly, for all conditions, the models from **Scenario 1** fit significantly better than those from **Scenario 2**. The same outcomes/trials were used in each set of models, which is what affords us their comparison.
+
+```{r psar1, eval = FALSE}
+x1 <- data.frame(do.call(rbind, lapply(splam(x), function(z){
+  z0 <- split(z, z$condition)
+  z1 <- lapply(z0, function(k){
+    #if(1 %in% k$trial){k <- k[-which(k$trial == 1), ]}
+    return(k[-1, ])
+  })
+  trials <- lapply(lapply(z1, '[[', 'trial'), function(k) k - 1)
+  z1 <- lapply(z1, function(k){
+    colnames(k) <- paste0(colnames(k), '.y')
+    return(k)
+  })
+  z2 <- lapply(setNames(lapply(1:5, function(k){
+    z[which(z$trial %in% trials[[k]]), ]
+  }), names(trials)), function(i){
+    colnames(i) <- paste0(colnames(i), '.x')
+    return(i)
+  })
+  check1 <- sapply(names(trials), function(k) all(z1[[k]]$trial.y - z2[[k]]$trial.x == 1))
+  check2 <- sapply(names(trials), function(k) all(z1[[k]]$ID.y == z2[[k]]$ID.x))
+  check3 <- sapply(names(trials), function(k) all(z1[[k]]$session.y == z2[[k]]$session.x))
+  if(any(!check1)){warning('Trials mismatched')}
+  if(any(!check2)){warning('IDs mismatched')}
+  #if(any(!check3)){warning('Some predictions span across sessions')}
+  out <- data.frame(do.call(rbind, lapply(names(trials), function(k){
+    data.frame(z2[[k]], data.frame(z1[[k]], trial_new = 1:nrow(z1[[k]])))
+  })))
+  return(out)
+})))
+rownames(x1) <- 1:nrow(x1)
+
+
+psar_mods1.1 <- lapply(split(x1, x1$condition.y), function(z){
+  lme4::lmer(item_correct.y ~ item_correct.x + condition.x + (1|session.x) + (1|ID.y), data = z, REML = FALSE)
+})
+
+psar_mods2.1 <- lapply(split(x1, x1$condition.y), function(z){
+  lme4::lmer(item_correct.y ~ item_correct.x + condition.x + trial_new + (1|session.x) + (1|ID.y), data = z, REML = FALSE)
+})
+
+psar_comps1 <- lapply(names(psar_mods1.1), function(z) anova(psar_mods1.1[[z]], psar_mods2.1[[z]]))
+```
+
+```{r psar2, eval = FALSE}
+x2 <- data.frame(do.call(rbind, lapply(splam(x), function(z){
+  z0 <- split(z, z$condition)
+  z1 <- lapply(z0, function(k){
+    colnames(k) <- paste0(colnames(k), '.y')
+    return(k[-1, ])
+  })
+  z2 <- lapply(z0, function(k){
+    colnames(k) <- paste0(colnames(k), '.x')
+    return(k[-nrow(k), ])
+  })
+  out <- data.frame(do.call(rbind, lapply(names(z1), function(k){
+    data.frame(z2[[k]], data.frame(z1[[k]], trial_new = 1:nrow(z1[[k]])))
+  })))
+  return(out)
+})))
+rownames(x2) <- 1:nrow(x2)
+
+
+psar_mods1.2 <- lapply(split(x2, x2$condition.y), function(z){
+  lme4::lmer(item_correct.y ~ item_correct.x + (1|session.x) + (1|ID.y), data = z, REML = FALSE)
+})
+
+psar_mods2.2 <- lapply(split(x2, x2$condition.y), function(z){
+  lme4::lmer(item_correct.y ~ item_correct.x + trial_new + (1|session.x) + (1|ID.y), data = z, REML = FALSE)
+})
+
+psar_comps2 <- lapply(names(psar_mods1.2), function(z) anova(psar_mods1.2[[z]], psar_mods2.2[[z]]))
+```
+
+```{r psar3, eval = FALSE}
+psar_comps3 <- lapply(names(psar_mods1.1), function(z) anova(psar_mods2.1[[z]], psar_mods2.2[[z]]))
+```
